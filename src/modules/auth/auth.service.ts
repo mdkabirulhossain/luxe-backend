@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
@@ -19,7 +18,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const existingUser = await this.prisma.db.user.findUnique({ // ✅ .db.user
+    const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
@@ -29,7 +28,7 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    const user = await this.prisma.db.user.create({ // ✅ .db.user
+    const user = await this.prisma.user.create({
       data: {
         name: dto.name,
         email: dto.email,
@@ -38,6 +37,7 @@ export class AuthService {
       },
     });
 
+    // Remove sensitive data before returning
     const { password, ...result } = user;
     return {
       message: 'User registered successfully',
@@ -46,7 +46,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.db.user.findUnique({ // ✅ .db.user
+    const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
@@ -60,7 +60,7 @@ export class AuthService {
     }
 
     const payload = { sub: user.id, email: user.email, role: user.role };
-
+    
     return {
       access_token: await this.jwtService.signAsync(payload),
       user: {
@@ -73,7 +73,7 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    const user = await this.prisma.db.user.findUnique({ // ✅ .db.user
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
     if (!user) throw new UnauthorizedException();
