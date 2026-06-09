@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaClientService } from './prisma-client.service';
@@ -7,4 +8,6 @@ import { PrismaClientService } from './prisma-client.service';
   providers: [PrismaClientService],
   exports: [PrismaClientService],
 })
-export class PrismaClientModule {}
+export class PrismaClientModule { }
+
+

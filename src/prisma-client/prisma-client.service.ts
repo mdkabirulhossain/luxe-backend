@@ -6,27 +6,24 @@ import { PrismaClient } from '../../generated/prisma/client';
 
 @Injectable()
 export class PrismaClientService implements OnModuleInit, OnModuleDestroy {
-  private readonly prisma: PrismaClient;
+  private readonly client: PrismaClient;
 
   constructor(private readonly configService: ConfigService) {
     const connectionString = this.configService.getOrThrow<string>('DATABASE_URL');
     const adapter = new PrismaPg({ connectionString });
-    this.prisma = new PrismaClient({ adapter });
+    this.client = new PrismaClient({ adapter });
+  }
+
+  // Expose the full typed client
+  get db(): PrismaClient {
+    return this.client;
   }
 
   async onModuleInit(): Promise<void> {
-    await this.prisma.$connect();
+    await this.client.$connect();
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
-  }
-
-  /**
-   * Returns the underlying PrismaClient instance.
-   * Use this in other services to access database models.
-   */
-  getClient(): PrismaClient {
-    return this.prisma;
+    await this.client.$disconnect();
   }
 }
