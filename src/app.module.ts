@@ -1,5 +1,6 @@
 /* eslint-disable prettier/prettier */
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaClientModule } from './prisma-client/prisma-client.module';
@@ -14,7 +15,22 @@ import { ReviewModule } from './modules/review/review.module';
 import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
-  imports: [PrismaClientModule, AuthModule, UserModule, CategoryModule, ProductModule, CartModule, WishlistModule, OrderModule, ReviewModule, AdminModule],
+  imports: [
+    ConfigModule.forRoot({       // ← ADD THIS FIRST
+      isGlobal: true,            // ← makes ConfigService available everywhere
+      envFilePath: '.env',
+    }),
+    PrismaClientModule,
+    AuthModule,
+    UserModule,
+    CategoryModule,
+    ProductModule,
+    CartModule,
+    WishlistModule,
+    OrderModule,
+    ReviewModule,
+    AdminModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
