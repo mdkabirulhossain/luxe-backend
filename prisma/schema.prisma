@@ -8,23 +8,32 @@ datasource db {
 
 // ====================== BASE MODELS ======================
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  password      String
-  name          String
-  phone         String?
-  role          Role      @default(CUSTOMER)
-  isActive      Boolean   @default(true)
-  avatar        String?
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String?   // Changed to optional to support OAuth/Google logins
+  name              String
+  phone             String?   @unique // Added @unique to support phone-based lookup/login
+  role              Role      @default(CUSTOMER)
+  isActive          Boolean   @default(true)
+  avatar            String?
   
-  cart          Cart?
-  wishlist      Wishlist?
-  orders        Order[]
-  addresses     Address[]
-  reviews       Review[]
+  // --- Authentication Security Tokens ---
+  resetToken               String?   @unique // Stores the hashed password reset token
+  resetTokenExpires        DateTime?         // Stores expiration timestamp for the token
+  emailVerificationToken   String?   @unique // Stores the email verification token
+  emailVerificationExpires DateTime?         // Stores expiration timestamp for email verification
+  isEmailVerified          Boolean   @default(false)
+  refreshToken             String?             // Stores the hashed refresh token
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  // --- Relations ---
+  cart              Cart?
+  wishlist          Wishlist?
+  orders            Order[]
+  addresses         Address[]
+  reviews           Review[]
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 model Category {
