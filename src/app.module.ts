@@ -16,8 +16,8 @@ import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({       // ← ADD THIS FIRST
-      isGlobal: true,            // ← makes ConfigService available everywhere
+    ConfigModule.forRoot({       
+      isGlobal: true,             
       envFilePath: '.env',
     }),
     PrismaClientModule,
