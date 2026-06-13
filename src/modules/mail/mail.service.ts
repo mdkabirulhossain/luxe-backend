@@ -55,14 +55,17 @@ export class MailService {
 
     if (this.transporter) {
       try {
-        const info = await this.transporter.sendMail({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const info: any = await this.transporter.sendMail({
           from,
           to,
           subject,
           text,
           html,
         });
-        this.logger.log(`Email sent to ${to} (messageId: ${info.messageId})`);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        const messageId = String(info?.messageId || 'unknown');
+        this.logger.log(`Email sent to ${to} (messageId: ${messageId})`);
       } catch (error) {
         this.logger.error(`Failed to send email to ${to}`, (error as Error).stack);
         throw new Error(`Failed to send email to ${to}. Please try again later.`);
