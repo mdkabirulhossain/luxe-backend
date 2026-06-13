@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable prettier/prettier */
-import { ConflictException, Injectable, UnauthorizedException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaClientService } from '../../prisma-client/prisma-client.service';
 import { JwtService } from '@nestjs/jwt';
 import { RegisterDto } from './dto/register.dto';
@@ -19,6 +19,8 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaClientService,
     private jwtService: JwtService,
@@ -118,7 +120,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    // Look up user matching the combined identifier column logic
+    // Look up user by email or phone
     const user = await this.prisma.user.findFirst({
       where: {
         OR: [
@@ -129,11 +131,19 @@ export class AuthService {
     });
 
     if (!user) {
+      this.logger.warn(`Login failed: No user found with identifier "${dto.identifier}"`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password || '');
+    // Check if user has a password (OAuth-only users won't have one)
+    if (!user.password) {
+      this.logger.warn(`Login failed: User "${dto.identifier}" has no password (OAuth-only account)`);
+      throw new UnauthorizedException('This account uses social login. Please log in with Google.');
+    }
+
+    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordValid) {
+      this.logger.warn(`Login failed: Incorrect password for user "${dto.identifier}"`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
