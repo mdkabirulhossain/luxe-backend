@@ -61,24 +61,33 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    // Check if user already exists via Email OR Phone (if phone is provided)
-    const existingUser = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: dto.email },
-          ...(dto.phone ? [{ phone: dto.phone }] : []),
-        ],
-      },
+    // Check if email is already registered
+    const existingEmail = await this.prisma.user.findUnique({
+      where: { email: dto.email },
     });
 
-    if (existingUser) {
-      throw new ConflictException('Email or Phone number is already registered');
+    if (existingEmail) {
+      throw new ConflictException('This email address is already registered.');
+    }
+
+    // Check if phone is already registered (only if phone is provided)
+    if (dto.phone) {
+      const existingPhone = await this.prisma.user.findUnique({
+        where: { phone: dto.phone },
+      });
+
+      if (existingPhone) {
+        throw new ConflictException('This phone number is already registered.');
+      }
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    // Generate a 6-digit OTP (industry standard — like Gmail, Facebook, Amazon)
+    const otp = crypto.randomInt(100000, 999999).toString();
+    // Hash the OTP before storing — only the hash is persisted
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     const user = await this.prisma.user.create({
       data: {
@@ -87,13 +96,13 @@ export class AuthService {
         password: hashedPassword,
         phone: dto.phone,
         isEmailVerified: false,
-        emailVerificationToken: verificationToken,
-        emailVerificationExpires: verificationExpiry,
+        emailVerificationToken: otpHash,
+        emailVerificationExpires: otpExpiry,
       } as any,
     });
 
-    // Send email verification link/OTP
-    await this.mailService.sendVerificationEmail(user.email, verificationToken);
+    // Send the raw OTP to the user's email
+    await this.mailService.sendVerificationEmail(user.email, otp);
 
     // Generate access & refresh tokens
     const payload = { sub: user.id, email: user.email, role: (user as any).role };
@@ -151,15 +160,29 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        emailVerificationToken: dto.token,
-        emailVerificationExpires: { gte: new Date() },
-      } as any,
+    // Look up user by email first (OTP is 6 digits, not globally unique)
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
     });
 
     if (!user) {
-      throw new BadRequestException('Invalid or expired email verification token.');
+      throw new BadRequestException('Invalid email or OTP.');
+    }
+
+    if ((user as any).isEmailVerified) {
+      throw new BadRequestException('Email is already verified.');
+    }
+
+    // Check OTP expiry
+    const emailVerificationExpires = (user as any).emailVerificationExpires as Date | null;
+    if (!emailVerificationExpires || new Date() > emailVerificationExpires) {
+      throw new BadRequestException('OTP has expired. Please request a new one.');
+    }
+
+    // Hash the submitted OTP and compare against stored hash
+    const otpHash = crypto.createHash('sha256').update(dto.otp).digest('hex');
+    if ((user as any).emailVerificationToken !== otpHash) {
+      throw new BadRequestException('Invalid OTP. Please check and try again.');
     }
 
     await this.prisma.user.update({
@@ -187,20 +210,33 @@ export class AuthService {
       throw new BadRequestException('Email is already verified.');
     }
 
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    // Rate limiting: enforce a 60-second cooldown between resend requests
+    const emailVerificationExpires = (user as any).emailVerificationExpires as Date | null;
+    if (emailVerificationExpires) {
+      // OTP was created at (expires - 10min), so cooldown ends at (created + 60s)
+      const otpCreatedAt = new Date(emailVerificationExpires.getTime() - 10 * 60 * 1000);
+      const cooldownEnd = new Date(otpCreatedAt.getTime() + 60 * 1000); // 60 seconds
+      if (new Date() < cooldownEnd) {
+        throw new BadRequestException('Please wait before requesting another verification email.');
+      }
+    }
+
+    // Generate a new 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
-        emailVerificationToken: verificationToken,
-        emailVerificationExpires: verificationExpiry,
+        emailVerificationToken: otpHash,
+        emailVerificationExpires: otpExpiry,
       } as any,
     });
 
-    await this.mailService.sendVerificationEmail(user.email, verificationToken);
+    await this.mailService.sendVerificationEmail(user.email, otp);
 
-    return { message: 'Verification email resent successfully.' };
+    return { message: 'Verification OTP resent successfully.' };
   }
 
   async refreshTokens(dto: RefreshTokenDto) {

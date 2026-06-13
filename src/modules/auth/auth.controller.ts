@@ -21,13 +21,35 @@ import { AuthGuard } from '@nestjs/passport';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // ─── Registration & Email Verification ─────────────────────────
+
   @Post('register')
-  @ApiOperation({ summary: 'Register a new user account' })
-  @ApiResponse({ status: 201, description: 'User successfully created. Returns Access & Refresh tokens.' })
+  @ApiOperation({ summary: 'Register a new user account (sends 6-digit OTP to email)' })
+  @ApiResponse({ status: 201, description: 'User created. A 6-digit OTP has been sent to the email.' })
   @ApiResponse({ status: 409, description: 'Conflict: Email or phone already exists.' })
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('verify-email')
+  @ApiOperation({ summary: 'Verify email using the 6-digit OTP received in email' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully.' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Invalid or expired OTP.' })
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(verifyEmailDto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('resend-verification')
+  @ApiOperation({ summary: 'Resend a new 6-digit verification OTP to email' })
+  @ApiResponse({ status: 200, description: 'New OTP sent successfully.' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Email already verified, user not found, or cooldown active.' })
+  async resendVerification(@Body() resendVerificationDto: ResendVerificationDto) {
+    return this.authService.resendVerification(resendVerificationDto);
+  }
+
+  // ─── Login & Session ───────────────────────────────────────────
 
   @HttpCode(HttpStatus.OK)
   @Post('login')
@@ -52,24 +74,6 @@ export class AuthController {
   }
 
   @HttpCode(HttpStatus.OK)
-  @Post('verify-email')
-  @ApiOperation({ summary: 'Verify user email address using the received token' })
-  @ApiResponse({ status: 200, description: 'Email verified successfully.' })
-  @ApiResponse({ status: 400, description: 'Bad Request: Invalid or expired token.' })
-  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
-    return this.authService.verifyEmail(verifyEmailDto);
-  }
-
-  @HttpCode(HttpStatus.OK)
-  @Post('resend-verification')
-  @ApiOperation({ summary: 'Resend email verification token' })
-  @ApiResponse({ status: 200, description: 'Verification email resent successfully.' })
-  @ApiResponse({ status: 400, description: 'Bad Request: Email already verified or user not found.' })
-  async resendVerification(@Body() resendVerificationDto: ResendVerificationDto) {
-    return this.authService.resendVerification(resendVerificationDto);
-  }
-
-  @HttpCode(HttpStatus.OK)
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using a valid refresh token' })
   @ApiResponse({ status: 200, description: 'Tokens successfully refreshed. Returns rotated access & refresh tokens.' })
@@ -90,6 +94,8 @@ export class AuthController {
     return this.authService.logout(userId);
   }
 
+  // ─── Password Recovery ─────────────────────────────────────────
+
   @HttpCode(HttpStatus.OK)
   @Post('forgot-password')
   @ApiOperation({ summary: 'Initiate forgotten password workflow' })
@@ -106,6 +112,8 @@ export class AuthController {
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(resetPasswordDto);
   }
+
+  // ─── OAuth ─────────────────────────────────────────────────────
 
   @Get('google')
   @UseGuards(AuthGuard('google')) // Fixed: Use passport AuthGuard strategy redirection

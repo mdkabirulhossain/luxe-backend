@@ -1,13 +1,22 @@
 /* eslint-disable prettier/prettier */
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, Length } from 'class-validator';
 
 export class VerifyEmailDto {
   @ApiProperty({
-    example: 'd8c2c5fe70b7ad0ef4f58c704f08cb6001a1c97a8274...',
-    description: 'The email verification token received in email',
+    example: 'user@example.com',
+    description: 'The email address used during registration',
+  })
+  @IsNotEmpty()
+  @IsEmail()
+  email!: string;
+
+  @ApiProperty({
+    example: '847291',
+    description: 'The 6-digit OTP code received in email',
   })
   @IsNotEmpty()
   @IsString()
-  token!: string;
+  @Length(6, 6, { message: 'OTP must be exactly 6 digits' })
+  otp!: string;
 }
