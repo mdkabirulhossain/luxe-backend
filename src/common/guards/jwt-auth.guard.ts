@@ -1,12 +1,22 @@
 /* eslint-disable prettier/prettier */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+ 
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { PrismaClientService } from '../../prisma-client/prisma-client.service';
+
+interface JwtPayload {
+  sub: string;
+  email?: string;
+  role?: string;
+}
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private prisma: PrismaClientService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -17,12 +27,33 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync(token, {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
         secret: process.env.JWT_SECRET || 'fallbackSecret',
       });
+
+      // Verify that the user exists, is active, and has an active session in the database
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('User session not found');
+      }
+
+      if (!user.isActive) {
+        throw new UnauthorizedException('User account has been deactivated');
+      }
+
+      if (!user.refreshToken) {
+        throw new UnauthorizedException('Session expired or user logged out');
+      }
+
       // Attach the user payload to the request object
       request['user'] = payload;
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       throw new UnauthorizedException('Invalid or expired token');
     }
     return true;
