@@ -8,6 +8,13 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Enable CORS globally to handle preflight OPTIONS requests for Authorized clients
+  app.enableCors({
+    origin: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+  });
+
   // Enable Validation Pipes Globally
   app.useGlobalPipes(
     new ValidationPipe({
