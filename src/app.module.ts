@@ -13,6 +13,7 @@ import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { OrderModule } from './modules/order/order.module';
 import { ReviewModule } from './modules/review/review.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { UploadModule } from './modules/upload/upload.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AdminModule } from './modules/admin/admin.module';
     OrderModule,
     ReviewModule,
     AdminModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [AppService],
