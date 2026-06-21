@@ -40,6 +40,10 @@ export class JwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('User session not found');
       }
 
+      if ((user as any).isBanned) {
+        throw new UnauthorizedException(`User account has been banned. Reason: ${(user as any).banReason || 'No reason specified'}`);
+      }
+
       if (!user.isActive) {
         throw new UnauthorizedException('User account has been deactivated');
       }
