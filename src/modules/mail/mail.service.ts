@@ -89,13 +89,6 @@ ${text}
   // ────────────────────────────────────────────────────────────────
 
   private buildVerificationEmailHtml(otp: string): string {
-    // Split OTP into individual digits for styled display
-    const otpDigits = otp.split('').map(digit => `
-              <td style="width: 48px; height: 56px; background-color: #f7fafc; border: 2px solid #e2e8f0; border-radius: 8px; text-align: center; font-family: 'Courier New', monospace; font-size: 28px; font-weight: 700; color: #1a1a2e; letter-spacing: 0;">
-                ${digit}
-              </td>`).join(`
-              <td style="width: 8px;"></td>`);
-
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -126,17 +119,16 @@ ${text}
                 Welcome to Luxe! Enter the following code to verify your email address:
               </p>
 
-              <!-- OTP Code Display -->
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 auto 24px;">
+              <!-- OTP Code Display (Styled & Fully Copyable) -->
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 auto 32px;">
                 <tr>
-                  ${otpDigits}
+                  <td align="center" style="background-color: #f7fafc; border: 2px dashed #cbd5e0; border-radius: 8px; padding: 16px 32px; text-align: center;">
+                    <span style="font-family: 'Courier New', Courier, monospace; font-size: 32px; font-weight: 700; color: #1a1a2e; letter-spacing: 6px; display: inline-block;">
+                      ${otp}
+                    </span>
+                  </td>
                 </tr>
               </table>
-
-              <!-- Plain-text OTP for easy copy (triggers native auto-copy on Gmail/iOS/Android) -->
-              <p style="margin: 0 0 24px; color: #4a5568; font-size: 15px; text-align: center; line-height: 1.6;">
-                Your verification code is: <strong style="font-family: 'Courier New', monospace; font-size: 18px; color: #1a1a2e; letter-spacing: 2px;">${otp}</strong>
-              </p>
 
               <!-- Expiry Notice -->
               <p style="margin: 0 0 8px; color: #718096; font-size: 14px; text-align: center;">
