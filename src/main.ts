@@ -3,7 +3,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe, ValidationError } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 
@@ -27,6 +27,30 @@ async function bootstrap() {
     new ValidationPipe({
       whitelist: true,
       transform: true,
+      exceptionFactory: (errors: ValidationError[]) => {
+        const formatErrors = (validationErrors: ValidationError[]): Array<{ field: string; errors: string[] }> => {
+          const result: Array<{ field: string; errors: string[] }> = [];
+          const traverse = (error: ValidationError, prefix = '') => {
+            const field = prefix ? `${prefix}.${error.property}` : error.property;
+            if (error.constraints) {
+              result.push({
+                field,
+                errors: Object.values(error.constraints),
+              });
+            }
+            if (error.children && error.children.length > 0) {
+              error.children.forEach((child) => traverse(child, field));
+            }
+          };
+          validationErrors.forEach((err) => traverse(err));
+          return result;
+        };
+
+        return new BadRequestException({
+          message: 'Validation failed',
+          errors: formatErrors(errors),
+        });
+      },
     }),
   );
 
