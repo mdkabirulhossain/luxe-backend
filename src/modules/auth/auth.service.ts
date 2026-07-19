@@ -147,6 +147,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if ((user as any).isBanned) {
+      throw new ForbiddenException(`Your account has been banned. Reason: ${(user as any).banReason || 'No reason specified'}`);
+    }
+
     // Require email verification
     if (!(user as any).isEmailVerified) {
       throw new ForbiddenException('Please verify your email before logging in.');
@@ -372,6 +376,10 @@ export class AuthService {
           password: await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10), 
         } as any,
       });
+    }
+
+    if ((user as any).isBanned) {
+      throw new ForbiddenException(`Your account has been banned. Reason: ${(user as any).banReason || 'No reason specified'}`);
     }
 
     const payload = { sub: user.id, email: user.email, role: (user as any).role };
