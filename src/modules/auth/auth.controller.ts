@@ -3,7 +3,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable prettier/prettier */
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Request, Res, UseGuards } from '@nestjs/common';
+
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -126,19 +127,28 @@ export class AuthController {
   // ─── OAuth ─────────────────────────────────────────────────────
 
   @Get('google')
-  @UseGuards(AuthGuard('google')) // Fixed: Use passport AuthGuard strategy redirection
-  @ApiOperation({ summary: 'Redirects to Google login screen' })
+  @UseGuards(AuthGuard('google'))
+  @ApiOperation({
+    summary: 'Initiates Google OAuth 2.0 login redirect',
+    description: 'DO NOT call this endpoint via fetch() or axios in frontend. Navigate directly using window.location.href = "http://localhost:5000/auth/google" or an <a> link.',
+  })
+  @ApiResponse({ status: 302, description: 'HTTP 302 Redirect to Google OAuth 2.0 consent page.' })
   async googleAuth(@Request() req: any) {
-    // Guards handle authentication redirect automatically
+    // Passport AuthGuard automatically performs HTTP 302 redirect to Google consent screen
   }
 
   @Get('google/callback')
-  @UseGuards(AuthGuard('google')) // Fixed: Use passport AuthGuard
+  @UseGuards(AuthGuard('google'))
   @ResponseMessage('Google authentication successful')
   @ApiOperation({ summary: 'Handles Google identity resolution callback' })
-  @ApiResponse({ status: 200, description: 'Successfully authenticated with Google. Returns JWT tokens.' })
-  async googleAuthRedirect(@Request() req: any) {
-    return this.authService.googleLogin(req);
+  @ApiResponse({ status: 200, description: 'Successfully authenticated with Google. Redirects to frontend with access_token & refresh_token.' })
+  async googleAuthRedirect(@Request() req: any, @Res() res: any) {
+    const authData = await this.authService.googleLogin(req);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const redirectUrl = `${frontendUrl}/oauth-success?access_token=${authData.access_token}&refresh_token=${authData.refresh_token}`;
+    return res.redirect(redirectUrl);
   }
 }
+
+
 

@@ -15,10 +15,16 @@ async function bootstrap() {
     prefix: '/uploads/',
   });
 
-  // Enable CORS globally to handle preflight OPTIONS requests for Authorized clients
+  // Enable CORS globally to handle preflight OPTIONS requests for Authorized clients & Swagger
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (Swagger UI, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+      // Allow all origins (localhost:3000, localhost:5000, 127.0.0.1, etc.)
+      return callback(null, true);
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Requested-With', 'Origin'],
     credentials: true,
   });
 
@@ -54,11 +60,14 @@ async function bootstrap() {
     }),
   );
 
+  const port = process.env.PORT || 5000;
+
   // Configure Swagger Options
   const config = new DocumentBuilder()
     .setTitle('Luxe E-Commerce API')
     .setDescription('The Luxe E-Commerce backend API description')
     .setVersion('1.0')
+    .addServer(`http://localhost:${port}`, 'Local Development Server')
     .addBearerAuth(
       {
         type: 'http',
@@ -75,6 +84,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT || 3000);
+  await app.listen(port);
 }
+
 bootstrap();
