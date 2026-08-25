@@ -19,6 +19,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import { Role } from '@prisma/client';
 
 interface AuthenticatedRequest extends Express.Request {
@@ -37,6 +38,7 @@ export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
   @Post()
+  @ResponseMessage('Order placed successfully')
   @ApiOperation({ summary: 'Place a new order' })
   @ApiResponse({ status: 201, description: 'Order successfully created.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Out of stock or invalid items.' })
@@ -50,6 +52,7 @@ export class OrderController {
   }
 
   @Get()
+  @ResponseMessage('Orders retrieved successfully')
   @ApiOperation({ summary: 'Get order history (Customers view their own, Admins view all)' })
   @ApiResponse({ status: 200, description: 'List of orders retrieved successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
@@ -63,6 +66,7 @@ export class OrderController {
   }
 
   @Get(':id')
+  @ResponseMessage('Order details retrieved successfully')
   @ApiOperation({ summary: 'Get details of a specific order' })
   @ApiResponse({ status: 200, description: 'Order details retrieved successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
@@ -81,6 +85,7 @@ export class OrderController {
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)
+  @ResponseMessage('Order status updated successfully')
   @ApiOperation({ summary: 'Update an order status (Admin only)' })
   @ApiResponse({ status: 200, description: 'Order status successfully updated.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Insufficient stock for restoration.' })
@@ -94,3 +99,4 @@ export class OrderController {
     return this.orderService.updateOrderStatus(id, updateOrderStatusDto.status);
   }
 }
+

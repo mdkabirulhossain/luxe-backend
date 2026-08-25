@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import {
   Injectable,
   NestInterceptor,
@@ -10,13 +9,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Reflector } from '@nestjs/core';
 import { RESPONSE_MESSAGE_KEY } from '../decorators/response-message.decorator';
-
-export interface ApiResponse<T> {
-  success: boolean;
-  statusCode: number;
-  message: string;
-  data: T;
-}
+import { ApiResponse, PaginationMeta } from '../interfaces/api-response.interface';
 
 @Injectable()
 export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<unknown>> {
@@ -37,7 +30,7 @@ export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<u
 
     return next.handle().pipe(
       map((data: unknown) => {
-        // If data is already in the standardized response format, return it directly
+        // If data is already in full standardized response format, return directly
         if (
           data &&
           typeof data === 'object' &&
@@ -50,26 +43,63 @@ export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<u
 
         let message = decoratorMessage || 'Success';
         let responseData: unknown = data;
+        let responseMeta: PaginationMeta | undefined = undefined;
 
-        // If returned data contains a message property, extract it as the response message
-        if (data && typeof data === 'object') {
-          const dataObj = data as Record<string, unknown>;
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          const dataObj = { ...(data as Record<string, unknown>) };
+
+          // Extract message if returned inside object and not overridden by decorator
           if ('message' in dataObj && typeof dataObj.message === 'string') {
-            message = dataObj.message;
-            const rest = { ...dataObj };
-            delete rest.message;
-            // If there is no other data, set responseData to null, otherwise return the remaining keys
-            responseData = Object.keys(rest).length > 0 ? rest : null;
+            if (!decoratorMessage) {
+              message = dataObj.message;
+            }
+            delete dataObj.message;
+          }
+
+          // Extract and elevate pagination meta if present
+          if ('meta' in dataObj && dataObj.meta && typeof dataObj.meta === 'object') {
+            const rawMeta = dataObj.meta as Record<string, unknown>;
+            const total = Number(rawMeta.total ?? 0);
+            const page = Number(rawMeta.page ?? 1);
+            const limit = Number(rawMeta.limit ?? 10);
+            const totalPages = Number(rawMeta.totalPages ?? (limit > 0 ? Math.ceil(total / limit) : 1));
+
+            responseMeta = {
+              total,
+              page,
+              limit,
+              totalPages,
+              hasNextPage: typeof rawMeta.hasNextPage === 'boolean' ? rawMeta.hasNextPage : page < totalPages,
+              hasPreviousPage: typeof rawMeta.hasPreviousPage === 'boolean' ? rawMeta.hasPreviousPage : page > 1,
+            };
+
+            delete dataObj.meta;
+
+            // If object contains `data` property alongside `meta`, elevate the inner `data`
+            if ('data' in dataObj) {
+              responseData = dataObj.data;
+            } else {
+              responseData = dataObj;
+            }
+          } else if ('message' in (data as Record<string, unknown>)) {
+            responseData = Object.keys(dataObj).length > 0 ? dataObj : null;
           }
         }
 
-        return {
+        const result: ApiResponse<unknown> = {
           success: true,
           statusCode,
           message,
           data: responseData !== undefined ? responseData : null,
         };
+
+        if (responseMeta) {
+          result.meta = responseMeta;
+        }
+
+        return result;
       }),
     );
   }
 }
+

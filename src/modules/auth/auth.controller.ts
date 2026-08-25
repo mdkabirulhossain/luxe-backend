@@ -15,6 +15,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { AuthGuard } from '@nestjs/passport';
+import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -24,6 +25,7 @@ export class AuthController {
   // ─── Registration & Email Verification ─────────────────────────
 
   @Post('register')
+  @ResponseMessage('User registration successful. Verification OTP sent to email.')
   @ApiOperation({ summary: 'Register a new user account (sends 6-digit OTP to email)' })
   @ApiResponse({ status: 201, description: 'User created. A 6-digit OTP has been sent to the email.' })
   @ApiResponse({ status: 409, description: 'Conflict: Email or phone already exists.' })
@@ -33,6 +35,7 @@ export class AuthController {
 
   @HttpCode(HttpStatus.OK)
   @Post('verify-email')
+  @ResponseMessage('Email verified successfully')
   @ApiOperation({ summary: 'Verify email using the 6-digit OTP received in email' })
   @ApiResponse({ status: 200, description: 'Email verified successfully.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Invalid or expired OTP.' })
@@ -42,6 +45,7 @@ export class AuthController {
 
   @HttpCode(HttpStatus.OK)
   @Post('resend-verification')
+  @ResponseMessage('Verification OTP resent successfully')
   @ApiOperation({ summary: 'Resend a new 6-digit verification OTP to email' })
   @ApiResponse({ status: 200, description: 'New OTP sent successfully.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Email already verified, user not found, or cooldown active.' })
@@ -53,6 +57,7 @@ export class AuthController {
 
   @HttpCode(HttpStatus.OK)
   @Post('login')
+  @ResponseMessage('Login successful')
   @ApiOperation({ summary: 'Log in with existing user credentials (Email or Phone)' })
   @ApiResponse({ status: 200, description: 'Successfully authenticated. Returns access & refresh tokens.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Invalid credentials.' })
@@ -64,6 +69,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @Get('profile')
+  @ResponseMessage('User profile retrieved successfully')
   @ApiOperation({ summary: 'Get current user profile session data' })
   @ApiResponse({ status: 200, description: 'Profile retrieved.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
@@ -75,6 +81,7 @@ export class AuthController {
 
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
+  @ResponseMessage('Tokens refreshed successfully')
   @ApiOperation({ summary: 'Refresh access token using a valid refresh token' })
   @ApiResponse({ status: 200, description: 'Tokens successfully refreshed. Returns rotated access & refresh tokens.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Invalid or expired refresh token.' })
@@ -86,6 +93,7 @@ export class AuthController {
   @ApiBearerAuth('JWT-auth')
   @HttpCode(HttpStatus.OK)
   @Post('logout')
+  @ResponseMessage('Logged out successfully')
   @ApiOperation({ summary: 'Invalidate current session by clearing the stored refresh token' })
   @ApiResponse({ status: 200, description: 'Successfully logged out.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
@@ -98,6 +106,7 @@ export class AuthController {
 
   @HttpCode(HttpStatus.OK)
   @Post('forgot-password')
+  @ResponseMessage('Password reset token sent to email if account exists')
   @ApiOperation({ summary: 'Initiate forgotten password workflow' })
   @ApiResponse({ status: 200, description: 'Dispatches password token via out-of-band channel.' })
   async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
@@ -106,6 +115,7 @@ export class AuthController {
 
   @HttpCode(HttpStatus.OK)
   @Post('reset-password')
+  @ResponseMessage('Password reset successfully')
   @ApiOperation({ summary: 'Submit secure token to change user password' })
   @ApiResponse({ status: 200, description: 'Password reset successfully executed.' })
   @ApiResponse({ status: 401, description: 'Token invalid or expired.' })
@@ -124,9 +134,11 @@ export class AuthController {
 
   @Get('google/callback')
   @UseGuards(AuthGuard('google')) // Fixed: Use passport AuthGuard
+  @ResponseMessage('Google authentication successful')
   @ApiOperation({ summary: 'Handles Google identity resolution callback' })
   @ApiResponse({ status: 200, description: 'Successfully authenticated with Google. Returns JWT tokens.' })
   async googleAuthRedirect(@Request() req: any) {
     return this.authService.googleLogin(req);
   }
 }
+

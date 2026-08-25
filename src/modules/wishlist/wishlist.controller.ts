@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { WishlistService } from './wishlist.service';
 import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 
 interface AuthenticatedRequest extends Express.Request {
   user?: {
@@ -33,6 +34,7 @@ export class WishlistController {
   constructor(private readonly wishlistService: WishlistService) {}
 
   @Get()
+  @ResponseMessage('Wishlist retrieved successfully')
   @ApiOperation({ summary: 'Get current user\'s wishlist' })
   @ApiResponse({ status: 200, description: 'Wishlist retrieved successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
@@ -45,6 +47,7 @@ export class WishlistController {
   }
 
   @Post()
+  @ResponseMessage('Product added to wishlist successfully')
   @ApiOperation({ summary: 'Add a product to the wishlist' })
   @ApiResponse({ status: 201, description: 'Product successfully added to wishlist.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Product is already in wishlist or invalid UUID.' })
@@ -60,6 +63,7 @@ export class WishlistController {
 
   @Delete('clear')
   @HttpCode(HttpStatus.OK)
+  @ResponseMessage('Wishlist cleared successfully')
   @ApiOperation({ summary: 'Clear all items from the wishlist' })
   @ApiResponse({ status: 200, description: 'Wishlist successfully cleared.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
@@ -74,6 +78,7 @@ export class WishlistController {
 
   @Delete(':productId')
   @HttpCode(HttpStatus.OK)
+  @ResponseMessage('Product removed from wishlist successfully')
   @ApiOperation({ summary: 'Remove a product from the wishlist' })
   @ApiResponse({ status: 200, description: 'Product successfully removed from wishlist.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
@@ -86,3 +91,4 @@ export class WishlistController {
     return this.wishlistService.removeFromWishlist(userId, productId);
   }
 }
+

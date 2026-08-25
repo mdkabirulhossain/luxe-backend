@@ -8,6 +8,7 @@ import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import { Role } from '@prisma/client';
 import { AdminUserQueryDto } from './dto/admin-user-query.dto';
 import { BanUserDto } from './dto/ban-user.dto';
@@ -21,6 +22,7 @@ export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('users')
+  @ResponseMessage('Users retrieved successfully')
   @ApiOperation({ summary: 'Get a paginated list of all users with search and filtering' })
   @ApiResponse({ status: 200, description: 'List of users retrieved successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
@@ -30,6 +32,7 @@ export class AdminController {
   }
 
   @Get('users/:id')
+  @ResponseMessage('User details retrieved successfully')
   @ApiOperation({ summary: 'Get details of a specific user by their ID' })
   @ApiResponse({ status: 200, description: 'User details retrieved successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
@@ -41,6 +44,7 @@ export class AdminController {
 
   @Post('users/:id/ban')
   @HttpCode(HttpStatus.OK)
+  @ResponseMessage('User account has been successfully banned')
   @ApiOperation({ summary: 'Ban a user by their ID with a proper reason' })
   @ApiResponse({ status: 200, description: 'User account has been successfully banned.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Self-banning or admin-banning not allowed.' })
@@ -58,6 +62,7 @@ export class AdminController {
 
   @Post('users/:id/unban')
   @HttpCode(HttpStatus.OK)
+  @ResponseMessage('User account has been successfully unbanned')
   @ApiOperation({ summary: 'Unban a user by their ID' })
   @ApiResponse({ status: 200, description: 'User account has been successfully unbanned.' })
   @ApiResponse({ status: 400, description: 'Bad Request: User is not banned.' })
@@ -72,3 +77,4 @@ export class AdminController {
     return this.adminService.unbanUser(adminId, targetUserId);
   }
 }
+

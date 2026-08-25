@@ -21,6 +21,7 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 
 @ApiTags('Categories')
 @Controller('category')
@@ -31,6 +32,7 @@ export class CategoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth('JWT-auth')
+  @ResponseMessage('Category created successfully')
   @ApiOperation({ summary: 'Create a new category (Admin only)' })
   @ApiResponse({ status: 201, description: 'Category successfully created.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Invalid DTO parameters or circular parent relationships.' })
@@ -42,6 +44,7 @@ export class CategoryController {
   }
 
   @Get()
+  @ResponseMessage('Categories retrieved successfully')
   @ApiOperation({ summary: 'Get list of all categories' })
   @ApiQuery({ name: 'search', required: false, description: 'Search term for name or description' })
   @ApiQuery({ name: 'isActive', required: false, description: 'Filter by active status (true/false)' })
@@ -58,6 +61,7 @@ export class CategoryController {
   }
 
   @Get(':idOrSlug')
+  @ResponseMessage('Category details retrieved successfully')
   @ApiOperation({ summary: 'Get a single category by ID or unique slug' })
   @ApiResponse({ status: 200, description: 'Category details retrieved.' })
   @ApiResponse({ status: 404, description: 'Not Found: Category not found.' })
@@ -69,6 +73,7 @@ export class CategoryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth('JWT-auth')
+  @ResponseMessage('Category updated successfully')
   @ApiOperation({ summary: 'Update an existing category (Admin only)' })
   @ApiResponse({ status: 200, description: 'Category updated.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Self-referential or circular parent dependency.' })
@@ -84,6 +89,7 @@ export class CategoryController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth('JWT-auth')
   @HttpCode(HttpStatus.OK)
+  @ResponseMessage('Category deleted successfully')
   @ApiOperation({ summary: 'Delete a category (Admin only)' })
   @ApiResponse({ status: 200, description: 'Category successfully deleted.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Category has subcategories or associated products.' })
@@ -94,3 +100,4 @@ export class CategoryController {
     return this.categoryService.remove(id);
   }
 }
+

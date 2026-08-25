@@ -8,15 +8,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { ApiErrorResponse } from '../interfaces/api-response.interface';
 
-export interface ApiErrorResponse {
-  success: boolean;
-  statusCode: number;
-  message: string;
-  errors?: unknown[] | null;
-  timestamp: string;
-  path: string;
-}
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {

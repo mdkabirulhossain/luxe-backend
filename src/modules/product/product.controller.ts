@@ -22,6 +22,7 @@ import { ProductQueryDto } from './dto/product-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 
 @ApiTags('Products')
 @Controller('product')
@@ -32,6 +33,7 @@ export class ProductController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth('JWT-auth')
+  @ResponseMessage('Product created successfully')
   @ApiOperation({ summary: 'Create a new product (Admin only)' })
   @ApiResponse({ status: 201, description: 'Product successfully created.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Invalid parameters or discountPrice >= price.' })
@@ -43,6 +45,7 @@ export class ProductController {
   }
 
   @Get()
+  @ResponseMessage('Products retrieved successfully')
   @ApiOperation({ summary: 'Get paginated list of products with filters' })
   @ApiResponse({ status: 200, description: 'Products retrieved successfully.' })
   async findAll(@Query() query: ProductQueryDto) {
@@ -50,6 +53,7 @@ export class ProductController {
   }
 
   @Get(':idOrSlug')
+  @ResponseMessage('Product details retrieved successfully')
   @ApiOperation({ summary: 'Get a single product by ID or unique slug' })
   @ApiResponse({ status: 200, description: 'Product retrieved.' })
   @ApiResponse({ status: 404, description: 'Not Found: Product not found.' })
@@ -61,6 +65,7 @@ export class ProductController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth('JWT-auth')
+  @ResponseMessage('Product updated successfully')
   @ApiOperation({ summary: 'Update an existing product (Admin only)' })
   @ApiResponse({ status: 200, description: 'Product successfully updated.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Invalid parameters or discountPrice >= price.' })
@@ -76,6 +81,7 @@ export class ProductController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth('JWT-auth')
   @HttpCode(HttpStatus.OK)
+  @ResponseMessage('Product deleted successfully')
   @ApiOperation({ summary: 'Delete a product (Admin only)' })
   @ApiResponse({ status: 200, description: 'Product successfully deleted.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Product is referenced in orders.' })
@@ -86,3 +92,4 @@ export class ProductController {
     return this.productService.remove(id);
   }
 }
+

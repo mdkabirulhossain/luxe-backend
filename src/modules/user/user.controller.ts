@@ -5,6 +5,7 @@ import { UserService } from './user.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 
 @ApiTags('Users')
 @Controller('user')
@@ -14,6 +15,7 @@ export class UserController {
   constructor(private readonly userService: UserService) { }
 
   @Patch('profile')
+  @ResponseMessage('Profile updated successfully')
   @ApiOperation({ summary: 'Update logged-in user and admin profile details (name, phone, avatar)' })
   @ApiResponse({ status: 200, description: 'Profile successfully updated.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Validation errors.' })
@@ -25,6 +27,7 @@ export class UserController {
   }
 
   @Patch('change-password')
+  @ResponseMessage('Password changed successfully')
   @ApiOperation({ summary: 'Change logged-in user and admin password' })
   @ApiResponse({ status: 200, description: 'Password successfully updated.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Incorrect current password or validation issues.' })
@@ -34,3 +37,4 @@ export class UserController {
     return this.userService.changePassword(userId, changePasswordDto);
   }
 }
+
