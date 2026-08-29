@@ -12,7 +12,7 @@ export class MailService {
     const host = this.configService.get<string>('SMTP_HOST');
     const port = this.configService.get<number | string>('SMTP_PORT');
     const user = this.configService.get<string>('SMTP_USER')?.trim();
-    const pass = this.configService.get<string>('SMTP_PASS')?.trim();
+    const pass = this.configService.get<string>('SMTP_PASS')?.replace(/\s+/g, '');
     const secureEnv = this.configService.get<string>('SMTP_SECURE');
 
     const portNum = port ? Number(port) : 587;
