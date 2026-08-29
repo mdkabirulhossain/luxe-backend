@@ -10,24 +10,39 @@ export class MailService {
 
   constructor(private configService: ConfigService) {
     const host = this.configService.get<string>('SMTP_HOST');
-    const port = this.configService.get<number>('SMTP_PORT');
-    const user = this.configService.get<string>('SMTP_USER');
-    const pass = this.configService.get<string>('SMTP_PASS');
-    const secure = this.configService.get<string>('SMTP_SECURE') === 'true'; // true for port 465, false for 587
+    const port = this.configService.get<number | string>('SMTP_PORT');
+    const user = this.configService.get<string>('SMTP_USER')?.trim();
+    const pass = this.configService.get<string>('SMTP_PASS')?.trim();
+    const secureEnv = this.configService.get<string>('SMTP_SECURE');
 
-    if (host && port && user && pass) {
+    const portNum = port ? Number(port) : 587;
+    const secure = secureEnv === 'true' || portNum === 465;
+
+    if (host && user && pass) {
       this.transporter = nodemailer.createTransport({
         host,
-        port: Number(port),
-        secure, // TLS: true for 465, false for STARTTLS on 587
+        port: portNum,
+        secure, // true for port 465 (SSL), false for 587 (STARTTLS)
         auth: {
           user,
           pass,
         },
+        tls: {
+          rejectUnauthorized: false, // Prevent issues with self-signed SSL certificates in development
+        },
       });
-      this.logger.log(`Mailer transporter initialized (${host}:${port}, secure=${secure})`);
+
+      this.transporter.verify((error) => {
+        if (error) {
+          this.logger.error(`SMTP connection verification failed (${host}:${portNum}): ${error.message}`);
+        } else {
+          this.logger.log(`Mailer SMTP connected successfully (${host}:${portNum}, secure=${secure})`);
+        }
+      });
     } else {
-      this.logger.warn('SMTP configuration is missing. Emails will be logged to the console.');
+      this.logger.warn(
+        'SMTP configuration is missing or incomplete in .env (SMTP_USER / SMTP_PASS). Verification codes will be printed to console log.',
+      );
     }
   }
 

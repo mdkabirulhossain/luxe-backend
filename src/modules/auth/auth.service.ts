@@ -103,8 +103,16 @@ export class AuthService {
       } as any,
     });
 
-    // Send the raw OTP to the user's email
-    await this.mailService.sendVerificationEmail(user.email, otp);
+    // Send the raw OTP to the user's email with fault tolerance
+    let emailSent = false;
+    try {
+      await this.mailService.sendVerificationEmail(user.email, otp);
+      emailSent = true;
+    } catch (mailError) {
+      this.logger.error(
+        `Failed to send verification email to ${user.email} during registration: ${(mailError as Error).message}`,
+      );
+    }
 
     // Generate access & refresh tokens
     const payload = { sub: user.id, email: user.email, role: (user as any).role };
@@ -113,7 +121,10 @@ export class AuthService {
 
     const { password, ...result } = user;
     return {
-      message: 'User registered successfully. Please verify your email.',
+      message: emailSent
+        ? 'User registered successfully. Verification OTP sent to email.'
+        : 'User registered successfully. However, verification email delivery failed. Please ensure SMTP credentials are correct or request resend verification.',
+      emailSent,
       ...tokens,
       user: result,
     };
@@ -248,9 +259,17 @@ export class AuthService {
       } as any,
     });
 
-    await this.mailService.sendVerificationEmail(user.email, otp);
-
-    return { message: 'Verification OTP resent successfully.' };
+    try {
+      await this.mailService.sendVerificationEmail(user.email, otp);
+      return { message: 'Verification OTP resent successfully.' };
+    } catch (mailError) {
+      this.logger.error(
+        `Failed to resend verification email to ${user.email}: ${(mailError as Error).message}`,
+      );
+      throw new BadRequestException(
+        'Failed to dispatch verification email. Please check server SMTP configuration.',
+      );
+    }
   }
 
   async refreshTokens(dto: RefreshTokenDto) {
