@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
@@ -130,7 +132,8 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   @ApiOperation({
     summary: 'Initiates Google OAuth 2.0 login redirect',
-    description: 'DO NOT call this endpoint via fetch() or axios in frontend. Navigate directly using window.location.href = "http://localhost:5000/auth/google" or an <a> link.',
+    description:
+      '<b>NOTE:</b> Do NOT click the "Execute" button below in Swagger (it triggers a browser CORS "Failed to fetch" error because Google blocks background fetch requests).<br/><br/>👉 <b>To test Google OAuth login:</b> Click this link directly: <a href="http://localhost:5000/auth/google" target="_blank" style="font-weight:bold; color:#007bff;">http://localhost:5000/auth/google</a>',
   })
   @ApiResponse({ status: 302, description: 'HTTP 302 Redirect to Google OAuth 2.0 consent page.' })
   async googleAuth(@Request() req: any) {
