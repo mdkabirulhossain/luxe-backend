@@ -44,43 +44,32 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const email = process.env.ADMIN_EMAIL || 'admin@luxe.com';
+  const email = process.env.ADMIN_EMAIL || 'admin@yopmail.com';
   const password = process.env.ADMIN_PASSWORD || 'AdminPass123!';
 
-  console.log(`Checking for existing Admin account: "${email}"...`);
+  console.log(`Checking for Admin account with email: "${email}"...`);
 
-  // Check if an admin user already exists anywhere in the database
-  const adminExists = await prisma.user.findFirst({
-    where: { role: 'ADMIN' },
-  });
-
-  if (adminExists) {
-    console.log(`An Admin already exists in the database (ID: ${adminExists.id}, Email: ${adminExists.email}).`);
-    console.log('Skipping seed to prevent overwriting.');
-    return;
-  }
-
-  // Check if a user with the specified admin email already exists (even if currently a CUSTOMER)
-  const existingUserByEmail = await prisma.user.findUnique({
+  // Check if a user with the specified admin email exists
+  const existingUser = await prisma.user.findUnique({
     where: { email },
   });
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  if (existingUserByEmail) {
-    console.log(`User with email "${email}" already exists with role "${existingUserByEmail.role}". Promoting to ADMIN...`);
+  if (existingUser) {
+    console.log(`User with email "${email}" already exists. Ensuring ADMIN role & active status...`);
     await prisma.user.update({
-      where: { id: existingUserByEmail.id },
+      where: { id: existingUser.id },
       data: {
         role: 'ADMIN',
-        password: hashedPassword, // Reset/set password to seed password
+        password: hashedPassword,
         isEmailVerified: true,
         isActive: true,
       },
     });
-    console.log('User promoted to ADMIN successfully.');
+    console.log(`Admin user "${email}" updated successfully.`);
   } else {
-    console.log(`No Admin user found. Creating new Admin user: "${email}"...`);
+    console.log(`Creating new Admin user: "${email}"...`);
     const newAdmin = await prisma.user.create({
       data: {
         email,
@@ -91,7 +80,7 @@ async function main() {
         isActive: true,
       },
     });
-    console.log(`Admin user created successfully (ID: ${newAdmin.id}).`);
+    console.log(`Admin user created successfully (ID: ${newAdmin.id}, Email: ${newAdmin.email}).`);
   }
 }
 

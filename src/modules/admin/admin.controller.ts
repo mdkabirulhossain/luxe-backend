@@ -2,9 +2,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable prettier/prettier */
-import { Controller, Get, Post, Body, Query, Param, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Query, Param, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
+import { UserService } from '../user/user.service';
+import { ChangePasswordDto } from '../user/dto/change-password.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -19,7 +21,29 @@ import { BanUserDto } from './dto/ban-user.dto';
 @Roles(Role.ADMIN)
 @ApiBearerAuth('JWT-auth')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly userService: UserService,
+  ) {}
+
+  @Patch('change-password')
+  @ResponseMessage('Admin password updated successfully')
+  @ApiOperation({
+    summary: 'Change password for currently authenticated Admin account',
+    description:
+      'Allows logged-in Admin to update password after verifying current password. Revokes active refresh tokens for production-grade security.',
+  })
+  @ApiResponse({ status: 200, description: 'Admin password successfully updated. Refresh token revoked.' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Incorrect current password or validation errors.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: Requires Admin role.' })
+  async changePassword(
+    @Request() req: any,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    const adminId = req.user?.sub || req.user?.id;
+    return this.userService.changePassword(adminId, changePasswordDto);
+  }
 
   @Get('users')
   @ResponseMessage('Users retrieved successfully')

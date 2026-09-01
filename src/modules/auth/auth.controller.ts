@@ -61,10 +61,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('login')
   @ResponseMessage('Login successful')
-  @ApiOperation({ summary: 'Log in with existing user credentials (Email or Phone)' })
-  @ApiResponse({ status: 200, description: 'Successfully authenticated. Returns access & refresh tokens.' })
+  @ApiOperation({
+    summary: 'Log in with user or admin credentials (Email or Phone)',
+    description:
+      'Authenticates both Customer and Admin accounts (e.g. admin@yopmail.com). Returns access_token and refresh_token. Payload contains role claim (e.g., ADMIN).',
+  })
+  @ApiResponse({ status: 200, description: 'Successfully authenticated. Returns access & refresh tokens with user role.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Invalid credentials.' })
-  @ApiResponse({ status: 403, description: 'Forbidden: Email verification required.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: Email verification required or account banned.' })
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
   }
@@ -110,8 +114,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('forgot-password')
   @ResponseMessage('Password reset token sent to email if account exists')
-  @ApiOperation({ summary: 'Initiate forgotten password workflow' })
-  @ApiResponse({ status: 200, description: 'Dispatches password token via out-of-band channel.' })
+  @ApiOperation({
+    summary: 'Initiate forgotten password workflow for User or Admin',
+    description:
+      'Sends a secure 15-minute password reset link via email to the requested account (Customer or Admin e.g., admin@yopmail.com).',
+  })
+  @ApiResponse({ status: 200, description: 'Dispatches password reset link via email.' })
   async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
     return this.authService.forgotPassword(forgotPasswordDto);
   }
@@ -119,8 +127,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('reset-password')
   @ResponseMessage('Password reset successfully')
-  @ApiOperation({ summary: 'Submit secure token to change user password' })
-  @ApiResponse({ status: 200, description: 'Password reset successfully executed.' })
+  @ApiOperation({
+    summary: 'Submit secure token to reset password for User or Admin',
+    description:
+      'Verifies the email reset token, updates password, and revokes all active refresh tokens for security.',
+  })
+  @ApiResponse({ status: 200, description: 'Password reset successfully executed. Active tokens revoked.' })
   @ApiResponse({ status: 401, description: 'Token invalid or expired.' })
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(resetPasswordDto);

@@ -365,6 +365,7 @@ export class AuthService {
       where: { id: user.id },
       data: {
         password: hashedPassword,
+        refreshToken: null, // Revoke active refresh tokens for production security
         resetToken: null, // Clear token after successful consumption
         resetTokenExpires: null,
       } as any,
