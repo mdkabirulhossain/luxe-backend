@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable prettier/prettier */
 import { ConflictException, Injectable, UnauthorizedException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaClientService } from '../../prisma-client/prisma-client.service';
 import { JwtService } from '@nestjs/jwt';
@@ -14,6 +9,8 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { MailService } from '../mail/mail.service';
+import { UserPayload, JwtPayload } from '../../common/interfaces/user-payload.interface';
+import { AuthenticatedRequest } from '../../common/interfaces/authenticated-request.interface';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -27,7 +24,7 @@ export class AuthService {
     private mailService: MailService,
   ) {}
 
-  async generateTokens(payload: any) {
+  async generateTokens(payload: UserPayload | JwtPayload) {
     const secret = process.env.JWT_SECRET || 'fallbackSecret';
     
     const [accessToken, refreshToken] = await Promise.all([
@@ -52,12 +49,12 @@ export class AuthService {
       const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
       await this.prisma.user.update({
         where: { id: userId },
-        data: { refreshToken: hashedRefreshToken } as any,
+        data: { refreshToken: hashedRefreshToken },
       });
     } else {
       await this.prisma.user.update({
         where: { id: userId },
-        data: { refreshToken: null } as any,
+        data: { refreshToken: null },
       });
     }
   }
@@ -100,7 +97,7 @@ export class AuthService {
         isEmailVerified: false,
         emailVerificationToken: otpHash,
         emailVerificationExpires: otpExpiry,
-      } as any,
+      },
     });
 
     // Send the raw OTP to the user's email with fault tolerance
@@ -115,7 +112,7 @@ export class AuthService {
     }
 
     // Generate access & refresh tokens
-    const payload = { sub: user.id, email: user.email, role: (user as any).role };
+    const payload: UserPayload = { id: user.id, sub: user.id, email: user.email, role: user.role };
     const tokens = await this.generateTokens(payload);
     await this.updateRefreshToken(user.id, tokens.refresh_token);
 
@@ -158,17 +155,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if ((user as any).isBanned) {
-      throw new ForbiddenException(`Your account has been banned. Reason: ${(user as any).banReason || 'No reason specified'}`);
+    if (user.isBanned) {
+      throw new ForbiddenException(`Your account has been banned. Reason: ${user.banReason || 'No reason specified'}`);
     }
 
     // Require email verification
-    if (!(user as any).isEmailVerified) {
+    if (!user.isEmailVerified) {
       throw new ForbiddenException('Please verify your email before logging in.');
     }
 
     // Include clean authorization claims in payload signature
-    const payload = { sub: user.id, email: user.email, role: (user as any).role };
+    const payload: UserPayload = { id: user.id, sub: user.id, email: user.email, role: user.role };
     const tokens = await this.generateTokens(payload);
     await this.updateRefreshToken(user.id, tokens.refresh_token);
     
@@ -179,7 +176,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         phone: user.phone,
-        role: (user as any).role,
+        role: user.role,
       },
     };
   }
@@ -194,19 +191,19 @@ export class AuthService {
       throw new BadRequestException('Invalid email or OTP.');
     }
 
-    if ((user as any).isEmailVerified) {
+    if (user.isEmailVerified) {
       throw new BadRequestException('Email is already verified.');
     }
 
     // Check OTP expiry
-    const emailVerificationExpires = (user as any).emailVerificationExpires as Date | null;
+    const emailVerificationExpires = user.emailVerificationExpires;
     if (!emailVerificationExpires || new Date() > emailVerificationExpires) {
       throw new BadRequestException('OTP has expired. Please request a new one.');
     }
 
     // Hash the submitted OTP and compare against stored hash
     const otpHash = crypto.createHash('sha256').update(dto.otp).digest('hex');
-    if ((user as any).emailVerificationToken !== otpHash) {
+    if (user.emailVerificationToken !== otpHash) {
       throw new BadRequestException('Invalid OTP. Please check and try again.');
     }
 
@@ -216,7 +213,7 @@ export class AuthService {
         isEmailVerified: true,
         emailVerificationToken: null,
         emailVerificationExpires: null,
-      } as any,
+      },
     });
 
     return { message: 'Email verified successfully. You can now log in.' };
@@ -231,12 +228,12 @@ export class AuthService {
       throw new BadRequestException('User with this email does not exist.');
     }
 
-    if ((user as any).isEmailVerified) {
+    if (user.isEmailVerified) {
       throw new BadRequestException('Email is already verified.');
     }
 
     // Rate limiting: enforce a 60-second cooldown between resend requests
-    const emailVerificationExpires = (user as any).emailVerificationExpires as Date | null;
+    const emailVerificationExpires = user.emailVerificationExpires;
     if (emailVerificationExpires) {
       // OTP was created at (expires - 10min), so cooldown ends at (created + 60s)
       const otpCreatedAt = new Date(emailVerificationExpires.getTime() - 10 * 60 * 1000);
@@ -256,7 +253,7 @@ export class AuthService {
       data: {
         emailVerificationToken: otpHash,
         emailVerificationExpires: otpExpiry,
-      } as any,
+      },
     });
 
     try {
@@ -273,9 +270,9 @@ export class AuthService {
   }
 
   async refreshTokens(dto: RefreshTokenDto) {
-    let payload: any;
+    let payload: JwtPayload;
     try {
-      payload = await this.jwtService.verifyAsync(dto.refreshToken, {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(dto.refreshToken, {
         secret: process.env.JWT_SECRET || 'fallbackSecret',
       });
     } catch (err) {
@@ -286,16 +283,16 @@ export class AuthService {
       where: { id: payload.sub },
     });
 
-    if (!user || !(user as any).refreshToken) {
+    if (!user || !user.refreshToken) {
       throw new UnauthorizedException('Invalid or expired refresh token.');
     }
 
-    const isMatch = await bcrypt.compare(dto.refreshToken, (user as any).refreshToken);
+    const isMatch = await bcrypt.compare(dto.refreshToken, user.refreshToken);
     if (!isMatch) {
       throw new UnauthorizedException('Invalid or expired refresh token.');
     }
 
-    const newPayload = { sub: user.id, email: user.email, role: (user as any).role };
+    const newPayload: UserPayload = { id: user.id, sub: user.id, email: user.email, role: user.role };
     const tokens = await this.generateTokens(newPayload);
     await this.updateRefreshToken(user.id, tokens.refresh_token);
 
@@ -334,7 +331,7 @@ export class AuthService {
       data: {
         resetToken: tokenHash,
         resetTokenExpires: tokenExpiry,
-      } as any,
+      },
     });
 
     // Send email reset link
@@ -351,7 +348,7 @@ export class AuthService {
       where: {
         resetToken: tokenHash,
         resetTokenExpires: { gte: new Date() },
-      } as any,
+      },
     });
 
     if (!user) {
@@ -368,13 +365,13 @@ export class AuthService {
         refreshToken: null, // Revoke active refresh tokens for production security
         resetToken: null, // Clear token after successful consumption
         resetTokenExpires: null,
-      } as any,
+      },
     });
 
     return { message: 'Password reset successful. You can now log in.' };
   }
 
-  async googleLogin(req: any) {
+  async googleLogin(req: AuthenticatedRequest) {
     if (!req.user) {
       throw new UnauthorizedException('Authentication failed via Google');
     }
@@ -390,19 +387,20 @@ export class AuthService {
       user = await this.prisma.user.create({
         data: {
           email,
-          name,
+          name: name || 'Google User',
+          avatar: picture || null,
           isEmailVerified: true, // Google email is already verified
           // Generate a long random password placeholder for OAuth-only signups
           password: await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10), 
-        } as any,
+        },
       });
     }
 
-    if ((user as any).isBanned) {
-      throw new ForbiddenException(`Your account has been banned. Reason: ${(user as any).banReason || 'No reason specified'}`);
+    if (user.isBanned) {
+      throw new ForbiddenException(`Your account has been banned. Reason: ${user.banReason || 'No reason specified'}`);
     }
 
-    const payload = { sub: user.id, email: user.email, role: (user as any).role };
+    const payload: UserPayload = { id: user.id, sub: user.id, email: user.email, role: user.role };
     const tokens = await this.generateTokens(payload);
     await this.updateRefreshToken(user.id, tokens.refresh_token);
 

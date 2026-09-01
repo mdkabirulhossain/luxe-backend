@@ -18,12 +18,16 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { UploadService } from './upload.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 // Filter helper to ensure only images are accepted
-const imageFileFilter = (req: any, file: Express.Multer.File, callback: any) => {
+const imageFileFilter = (
+  req: Request,
+  file: Express.Multer.File,
+  callback: (error: Error | null, acceptFile: boolean) => void,
+) => {
   if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
     return callback(new BadRequestException('Only image files (jpg, jpeg, png, gif, webp, svg) are allowed!'), false);
   }
@@ -31,7 +35,11 @@ const imageFileFilter = (req: any, file: Express.Multer.File, callback: any) => 
 };
 
 // Filename generator helper
-const editFileName = (req: any, file: Express.Multer.File, callback: any) => {
+const editFileName = (
+  req: Request,
+  file: Express.Multer.File,
+  callback: (error: Error | null, filename: string) => void,
+) => {
   const fileExtName = extname(file.originalname);
   const originalNameCleaned = file.originalname
     .replace(fileExtName, '')
@@ -93,7 +101,7 @@ export class UploadController {
   @ApiResponse({ status: 201, description: 'Image successfully uploaded.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Missing file or invalid format.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Authentication required.' })
-  async uploadSingleFile(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
+  async uploadSingleFile(@UploadedFile() file: Express.Multer.File, @Req() req: Request) {
     if (!file) {
       throw new BadRequestException('Image file is required');
     }
@@ -124,7 +132,7 @@ export class UploadController {
   @ApiResponse({ status: 201, description: 'Images successfully uploaded.' })
   @ApiResponse({ status: 400, description: 'Bad Request: Missing files or invalid formats.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async uploadMultipleFiles(@UploadedFiles() files: Express.Multer.File[], @Req() req: any) {
+  async uploadMultipleFiles(@UploadedFiles() files: Express.Multer.File[], @Req() req: Request) {
     if (!files || files.length === 0) {
       throw new BadRequestException('At least one image file is required');
     }
@@ -132,3 +140,4 @@ export class UploadController {
     return { urls };
   }
 }
+

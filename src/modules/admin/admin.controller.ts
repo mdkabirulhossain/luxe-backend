@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable prettier/prettier */
 import { Controller, Get, Post, Patch, Body, Query, Param, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
@@ -14,6 +10,7 @@ import { ResponseMessage } from '../../common/decorators/response-message.decora
 import { Role } from '@prisma/client';
 import { AdminUserQueryDto } from './dto/admin-user-query.dto';
 import { BanUserDto } from './dto/ban-user.dto';
+import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request.interface';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -38,10 +35,10 @@ export class AdminController {
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
   @ApiResponse({ status: 403, description: 'Forbidden: Requires Admin role.' })
   async changePassword(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Body() changePasswordDto: ChangePasswordDto,
   ) {
-    const adminId = req.user?.sub || req.user?.id;
+    const adminId = req.user.sub || req.user.id;
     return this.userService.changePassword(adminId, changePasswordDto);
   }
 
@@ -76,11 +73,11 @@ export class AdminController {
   @ApiResponse({ status: 403, description: 'Forbidden: Requires Admin role.' })
   @ApiResponse({ status: 404, description: 'Not Found: User with specified ID does not exist.' })
   async banUser(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') targetUserId: string,
     @Body() banUserDto: BanUserDto,
   ) {
-    const adminId = req.user?.sub || req.user?.id;
+    const adminId = req.user.sub || req.user.id;
     return this.adminService.banUser(adminId, targetUserId, banUserDto.reason);
   }
 
@@ -94,11 +91,12 @@ export class AdminController {
   @ApiResponse({ status: 403, description: 'Forbidden: Requires Admin role.' })
   @ApiResponse({ status: 404, description: 'Not Found: User with specified ID does not exist.' })
   async unbanUser(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('id') targetUserId: string,
   ) {
-    const adminId = req.user?.sub || req.user?.id;
+    const adminId = req.user.sub || req.user.id;
     return this.adminService.unbanUser(adminId, targetUserId);
   }
 }
+
 

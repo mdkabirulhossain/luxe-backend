@@ -17,14 +17,8 @@ import { WishlistService } from './wishlist.service';
 import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
+import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request.interface';
 
-interface AuthenticatedRequest extends Express.Request {
-  user?: {
-    sub: string;
-    email?: string;
-    role?: string;
-  };
-}
 
 @ApiTags('Wishlist')
 @ApiBearerAuth('JWT-auth')

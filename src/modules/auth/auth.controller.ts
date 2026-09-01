@@ -1,12 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable prettier/prettier */
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Request, Res, UseGuards } from '@nestjs/common';
-
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -19,6 +12,8 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
+import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request.interface';
+
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -80,9 +75,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile session data' })
   @ApiResponse({ status: 200, description: 'Profile retrieved.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
-  async getProfile(@Request() req: any) {
+  async getProfile(@Request() req: AuthenticatedRequest) {
     // Safeguard safe parsing depending on custom strategy signatures
-    const userId = req.user?.sub || req.user?.id;
+    const userId = req.user.sub || req.user.id;
     return this.authService.getProfile(userId);
   }
 
@@ -104,8 +99,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Invalidate current session by clearing the stored refresh token' })
   @ApiResponse({ status: 200, description: 'Successfully logged out.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
-  async logout(@Request() req: any) {
-    const userId = req.user?.sub || req.user?.id;
+  async logout(@Request() req: AuthenticatedRequest) {
+    const userId = req.user.sub || req.user.id;
     return this.authService.logout(userId);
   }
 
@@ -148,7 +143,7 @@ export class AuthController {
       '<b>NOTE:</b> Do NOT click the "Execute" button below in Swagger (it triggers a browser CORS "Failed to fetch" error because Google blocks background fetch requests).<br/><br/>👉 <b>To test Google OAuth login:</b> Click this link directly: <a href="http://localhost:5000/auth/google" target="_blank" style="font-weight:bold; color:#007bff;">http://localhost:5000/auth/google</a>',
   })
   @ApiResponse({ status: 302, description: 'HTTP 302 Redirect to Google OAuth 2.0 consent page.' })
-  async googleAuth(@Request() req: any) {
+  async googleAuth(@Request() req: AuthenticatedRequest) {
     // Passport AuthGuard automatically performs HTTP 302 redirect to Google consent screen
   }
 
@@ -157,13 +152,14 @@ export class AuthController {
   @ResponseMessage('Google authentication successful')
   @ApiOperation({ summary: 'Handles Google identity resolution callback' })
   @ApiResponse({ status: 200, description: 'Successfully authenticated with Google. Redirects to frontend with access_token & refresh_token.' })
-  async googleAuthRedirect(@Request() req: any, @Res() res: any) {
+  async googleAuthRedirect(@Request() req: AuthenticatedRequest, @Res() res: Response) {
     const authData = await this.authService.googleLogin(req);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const redirectUrl = `${frontendUrl}/oauth-success?access_token=${authData.access_token}&refresh_token=${authData.refresh_token}`;
     return res.redirect(redirectUrl);
   }
 }
+
 
 
 

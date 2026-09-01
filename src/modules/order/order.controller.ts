@@ -21,14 +21,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import { Role } from '@prisma/client';
+import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request.interface';
 
-interface AuthenticatedRequest extends Express.Request {
-  user?: {
-    sub: string;
-    email?: string;
-    role?: Role;
-  };
-}
 
 @ApiTags('Orders')
 @ApiBearerAuth('JWT-auth')

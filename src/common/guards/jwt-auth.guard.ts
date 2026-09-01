@@ -4,12 +4,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { PrismaClientService } from '../../prisma-client/prisma-client.service';
-
-interface JwtPayload {
-  sub: string;
-  email?: string;
-  role?: string;
-}
+import { UserPayload } from '../interfaces/user-payload.interface';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -27,21 +22,21 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
+      const payload = await this.jwtService.verifyAsync<UserPayload>(token, {
         secret: process.env.JWT_SECRET || 'fallbackSecret',
       });
 
       // Verify that the user exists, is active, and has an active session in the database
       const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
+        where: { id: payload.sub || payload.id },
       });
 
       if (!user) {
         throw new UnauthorizedException('User session not found');
       }
 
-      if ((user as any).isBanned) {
-        throw new UnauthorizedException(`User account has been banned. Reason: ${(user as any).banReason || 'No reason specified'}`);
+      if (user.isBanned) {
+        throw new UnauthorizedException(`User account has been banned. Reason: ${user.banReason || 'No reason specified'}`);
       }
 
       if (!user.isActive) {
@@ -53,7 +48,13 @@ export class JwtAuthGuard implements CanActivate {
       }
 
       // Attach the user payload to the request object
-      request['user'] = payload;
+      request['user'] = {
+        id: user.id,
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+      };
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
