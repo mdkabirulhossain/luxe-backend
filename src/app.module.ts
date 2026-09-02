@@ -15,6 +15,7 @@ import { CartModule } from './modules/cart/cart.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { OrderModule } from './modules/order/order.module';
 import { ReviewModule } from './modules/review/review.module';
+import { CouponModule } from './modules/coupon/coupon.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { UploadModule } from './modules/upload/upload.module';
 
@@ -33,6 +34,7 @@ import { UploadModule } from './modules/upload/upload.module';
     WishlistModule,
     OrderModule,
     ReviewModule,
+    CouponModule,
     AdminModule,
     UploadModule,
   ],

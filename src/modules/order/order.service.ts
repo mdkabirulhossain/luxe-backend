@@ -10,6 +10,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaClientService } from '../../prisma-client/prisma-client.service';
+import { CouponService } from '../coupon/coupon.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { OrderStatus, Role, Prisma } from '@prisma/client';
@@ -18,7 +19,10 @@ import { OrderStatus, Role, Prisma } from '@prisma/client';
 export class OrderService {
   private readonly logger = new Logger(OrderService.name);
 
-  constructor(private readonly prisma: PrismaClientService) {}
+  constructor(
+    private readonly prisma: PrismaClientService,
+    private readonly couponService: CouponService,
+  ) {}
 
   /**
    * Format Order object to match high-level frontend interfaces with product & category details
@@ -82,6 +86,9 @@ export class OrderService {
       };
     });
 
+    const discountAmount = order.discountAmount || 0;
+    const subtotalAmount = Number((order.totalAmount + discountAmount).toFixed(2));
+
     return {
       id: order.id,
       userId: order.userId,
@@ -94,7 +101,10 @@ export class OrderService {
             avatar: order.user.avatar || null,
           }
         : null,
+      subtotalAmount,
+      discountAmount,
       totalAmount: order.totalAmount,
+      couponCode: order.couponCode || null,
       totalItems: formattedItems.reduce((acc: number, item: any) => acc + item.quantity, 0),
       status: order.status,
       shippingAddress: order.shippingAddress,
@@ -114,7 +124,7 @@ export class OrderService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      let totalAmount = 0;
+      let subtotalAmount = 0;
       const resolvedItems: {
         productId: string;
         quantity: number;
@@ -147,7 +157,7 @@ export class OrderService {
         const selectedSize = item.selectedSize || item.size || null;
 
         const finalPrice = product.price;
-        totalAmount += finalPrice * item.quantity;
+        subtotalAmount += finalPrice * item.quantity;
 
         resolvedItems.push({
           productId: item.productId,
@@ -168,11 +178,32 @@ export class OrderService {
         });
       }
 
+      // 2b. Validate & Apply Coupon Discount
+      let appliedCouponCode: string | null = null;
+      let discountAmount = 0;
+      let couponId: string | null = null;
+
+      if (createOrderDto.couponCode) {
+        const couponResult = await this.couponService.validateCoupon(
+          userId,
+          createOrderDto.couponCode,
+          subtotalAmount,
+          tx,
+        );
+        appliedCouponCode = couponResult.code;
+        discountAmount = couponResult.discountAmount;
+        couponId = couponResult.couponId;
+      }
+
+      const finalTotalAmount = Number(Math.max(0, subtotalAmount - discountAmount).toFixed(2));
+
       // 3. Create Order and OrderItems
       const order = await tx.order.create({
         data: {
           userId,
-          totalAmount: Number(totalAmount.toFixed(2)),
+          totalAmount: finalTotalAmount,
+          couponCode: appliedCouponCode,
+          discountAmount,
           status: OrderStatus.PENDING,
           shippingAddress: createOrderDto.shippingAddress as unknown as Prisma.InputJsonValue,
           items: {
@@ -207,6 +238,22 @@ export class OrderService {
           },
         },
       });
+
+      // 4. Record Coupon Usage
+      if (couponId) {
+        await tx.coupon.update({
+          where: { id: couponId },
+          data: { usedCount: { increment: 1 } },
+        });
+
+        await tx.couponUsage.create({
+          data: {
+            couponId,
+            userId,
+            orderId: order.id,
+          },
+        });
+      }
 
       // 4. Clear user's cart items if cart exists
       const userCart = await tx.cart.findUnique({ where: { userId } });

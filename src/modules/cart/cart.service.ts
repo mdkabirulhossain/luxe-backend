@@ -10,6 +10,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaClientService } from '../../prisma-client/prisma-client.service';
+import { CouponService } from '../coupon/coupon.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { CheckoutCartDto } from './dto/checkout-cart.dto';
@@ -19,7 +20,10 @@ import { OrderStatus, Prisma } from '@prisma/client';
 export class CartService {
   private readonly logger = new Logger(CartService.name);
 
-  constructor(private readonly prisma: PrismaClientService) {}
+  constructor(
+    private readonly prisma: PrismaClientService,
+    private readonly couponService: CouponService,
+  ) {}
 
   /**
    * Helper to verify if id matches UUID pattern.
@@ -461,7 +465,7 @@ export class CartService {
         throw new BadRequestException('Your shopping cart is empty. Please add items before checking out.');
       }
 
-      let totalAmount = 0;
+      let subtotalAmount = 0;
       const resolvedOrderItems: {
         productId: string;
         quantity: number;
@@ -489,7 +493,7 @@ export class CartService {
         }
 
         const itemPrice = product.price;
-        totalAmount += itemPrice * item.quantity;
+        subtotalAmount += itemPrice * item.quantity;
 
         resolvedOrderItems.push({
           productId: item.productId,
@@ -510,11 +514,32 @@ export class CartService {
         });
       }
 
+      // 3b. Validate & Apply Coupon Discount
+      let appliedCouponCode: string | null = null;
+      let discountAmount = 0;
+      let couponId: string | null = null;
+
+      if (checkoutCartDto.couponCode) {
+        const couponResult = await this.couponService.validateCoupon(
+          userId,
+          checkoutCartDto.couponCode,
+          subtotalAmount,
+          tx,
+        );
+        appliedCouponCode = couponResult.code;
+        discountAmount = couponResult.discountAmount;
+        couponId = couponResult.couponId;
+      }
+
+      const finalTotalAmount = Number(Math.max(0, subtotalAmount - discountAmount).toFixed(2));
+
       // 4. Create Order and OrderItems
       const createdOrder = await tx.order.create({
         data: {
           userId,
-          totalAmount: Number(totalAmount.toFixed(2)),
+          totalAmount: finalTotalAmount,
+          couponCode: appliedCouponCode,
+          discountAmount,
           status: OrderStatus.PENDING,
           shippingAddress: checkoutCartDto.shippingAddress as unknown as Prisma.InputJsonValue,
           items: {
@@ -549,6 +574,22 @@ export class CartService {
           },
         },
       });
+
+      // 4b. Record Coupon Usage
+      if (couponId) {
+        await tx.coupon.update({
+          where: { id: couponId },
+          data: { usedCount: { increment: 1 } },
+        });
+
+        await tx.couponUsage.create({
+          data: {
+            couponId,
+            userId,
+            orderId: createdOrder.id,
+          },
+        });
+      }
 
       // 5. Empty user cart items after successful order creation
       await tx.cartItem.deleteMany({

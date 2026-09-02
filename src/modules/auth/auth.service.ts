@@ -122,6 +122,11 @@ export class AuthService {
         ? 'User registered successfully. Verification OTP sent to email.'
         : 'User registered successfully. However, verification email delivery failed. Please ensure SMTP credentials are correct or request resend verification.',
       emailSent,
+      welcomeCoupon: {
+        code: 'WELCOME10',
+        discount: '10% OFF',
+        description: 'Enjoy 10% OFF your first order with promo code WELCOME10!',
+      },
       ...tokens,
       user: result,
     };

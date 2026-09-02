@@ -105,6 +105,11 @@ export class CreateOrderDto {
   @Type(() => CreateOrderItemDto)
   items!: CreateOrderItemDto[];
 
+  @ApiProperty({ example: 'WELCOME10', description: 'Promotional coupon code for discount', required: false })
+  @IsString()
+  @IsOptional()
+  couponCode?: string;
+
   @ApiProperty({ example: 'COD', description: 'Payment method (e.g. COD, STRIPE, CARD)', required: false, default: 'COD' })
   @IsString()
   @IsOptional()
