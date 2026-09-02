@@ -19,7 +19,6 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import type { AuthenticatedRequest } from '../../common/interfaces/authenticated-request.interface';
 
-
 @ApiTags('Wishlist')
 @ApiBearerAuth('JWT-auth')
 @UseGuards(JwtAuthGuard)
@@ -29,7 +28,7 @@ export class WishlistController {
 
   @Get()
   @ResponseMessage('Wishlist retrieved successfully')
-  @ApiOperation({ summary: 'Get current user\'s wishlist' })
+  @ApiOperation({ summary: "Get current user's wishlist with full product & category details" })
   @ApiResponse({ status: 200, description: 'Wishlist retrieved successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
   async getWishlist(@Request() req: AuthenticatedRequest) {
@@ -53,6 +52,34 @@ export class WishlistController {
       throw new UnauthorizedException('User session not found');
     }
     return this.wishlistService.addToWishlist(userId, addWishlistItemDto.productId);
+  }
+
+  @Post('toggle')
+  @HttpCode(HttpStatus.OK)
+  @ResponseMessage('Wishlist status toggled successfully')
+  @ApiOperation({ summary: 'Toggle product in wishlist (adds if missing, removes if present)' })
+  @ApiResponse({ status: 200, description: 'Wishlist status successfully toggled.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Not Found: Product not found.' })
+  async toggleWishlist(@Request() req: AuthenticatedRequest, @Body() addWishlistItemDto: AddWishlistItemDto) {
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new UnauthorizedException('User session not found');
+    }
+    return this.wishlistService.toggleWishlist(userId, addWishlistItemDto.productId);
+  }
+
+  @Get('check/:productId')
+  @ResponseMessage('Wishlist check completed successfully')
+  @ApiOperation({ summary: 'Check if a specific product is in the user wishlist' })
+  @ApiResponse({ status: 200, description: 'Wishlist status returned successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async checkWishlistStatus(@Request() req: AuthenticatedRequest, @Param('productId') productId: string) {
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new UnauthorizedException('User session not found');
+    }
+    return this.wishlistService.checkWishlistStatus(userId, productId);
   }
 
   @Delete('clear')
@@ -85,4 +112,3 @@ export class WishlistController {
     return this.wishlistService.removeFromWishlist(userId, productId);
   }
 }
-
