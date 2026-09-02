@@ -1,9 +1,34 @@
 /* eslint-disable prettier/prettier */
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsNotEmpty, IsObject, IsPositive, IsString, IsUUID, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
 
 export class ShippingAddressDto {
+  @ApiProperty({ example: 'John Doe', description: 'Recipient full name', required: false })
+  @IsString()
+  @IsOptional()
+  fullName?: string;
+
+  @ApiProperty({ example: '+1234567890', description: 'Recipient phone number', required: false })
+  @IsString()
+  @IsOptional()
+  phone?: string;
+
+  @ApiProperty({ example: 'john@example.com', description: 'Recipient email address', required: false })
+  @IsString()
+  @IsOptional()
+  email?: string;
+
   @ApiProperty({ example: '123 Luxury Ave', description: 'Street address' })
   @IsString()
   @IsNotEmpty()
@@ -14,15 +39,25 @@ export class ShippingAddressDto {
   @IsNotEmpty()
   city!: string;
 
+  @ApiProperty({ example: 'California', description: 'State / Province', required: false })
+  @IsString()
+  @IsOptional()
+  state?: string;
+
   @ApiProperty({ example: 'USA', description: 'Country' })
   @IsString()
   @IsNotEmpty()
   country!: string;
 
-  @ApiProperty({ example: '90210', description: 'Postal code' })
+  @ApiProperty({ example: '90210', description: 'Postal / ZIP code', required: false })
   @IsString()
-  @IsNotEmpty()
-  postalCode!: string;
+  @IsOptional()
+  postalCode?: string;
+
+  @ApiProperty({ example: '90210', description: 'Alias for postalCode', required: false })
+  @IsString()
+  @IsOptional()
+  zipCode?: string;
 }
 
 export class CreateOrderItemDto {
@@ -35,6 +70,26 @@ export class CreateOrderItemDto {
   @IsInt()
   @IsPositive()
   quantity!: number;
+
+  @ApiProperty({ example: 'Midnight Black', description: 'Selected color variant name or code', required: false })
+  @IsString()
+  @IsOptional()
+  selectedColor?: string;
+
+  @ApiProperty({ example: 'Midnight Black', description: 'Alias for selectedColor', required: false })
+  @IsString()
+  @IsOptional()
+  color?: string;
+
+  @ApiProperty({ example: 'L', description: 'Selected size variant', required: false })
+  @IsString()
+  @IsOptional()
+  selectedSize?: string;
+
+  @ApiProperty({ example: 'L', description: 'Alias for selectedSize', required: false })
+  @IsString()
+  @IsOptional()
+  size?: string;
 }
 
 export class CreateOrderDto {
@@ -49,4 +104,14 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
   items!: CreateOrderItemDto[];
+
+  @ApiProperty({ example: 'COD', description: 'Payment method (e.g. COD, STRIPE, CARD)', required: false, default: 'COD' })
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
+  @ApiProperty({ example: 'Please deliver between 9 AM and 5 PM', description: 'Special order notes', required: false })
+  @IsString()
+  @IsOptional()
+  notes?: string;
 }
