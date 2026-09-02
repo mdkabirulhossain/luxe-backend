@@ -7,6 +7,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaClientService } from '../../prisma-client/prisma-client.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { CategoryQueryDto } from './dto/category-query.dto';
 
 @Injectable()
 export class CategoryService {
@@ -17,19 +18,23 @@ export class CategoryService {
   /**
    * Helper to generate a clean, unique slug from a category name.
    */
-  private async generateUniqueSlug(name: string, idToExclude?: string): Promise<string> {
+  private async generateUniqueSlug(
+    name: string,
+    idToExclude?: string,
+    prismaClient: any = this.prisma,
+  ): Promise<string> {
     const baseSlug = name
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, '-')     // Replace non-alphanumeric characters with hyphens
       .replace(/(^-|-$)+/g, '');       // Trim leading/trailing hyphens
 
-    let slug = baseSlug;
+    let slug = baseSlug || 'category';
     let suffix = 1;
     let exists = true;
 
     while (exists) {
-      const category = await this.prisma.category.findFirst({
+      const category = await prismaClient.category.findFirst({
         where: {
           slug,
           NOT: idToExclude ? { id: idToExclude } : undefined,
@@ -56,44 +61,86 @@ export class CategoryService {
   }
 
   /**
-   * Create a new category
+   * Create a new category with optional subcategories (admin passes array of subcategory objects with name)
    */
   async create(createCategoryDto: CreateCategoryDto) {
-    const { name, description, image, isActive, parentId } = createCategoryDto;
+    const { name, image, isActive, subcategories } = createCategoryDto;
 
-    // Check parent category validity
-    if (parentId) {
-      const parentExists = await this.prisma.category.findUnique({
-        where: { id: parentId },
-      });
-      if (!parentExists) {
-        throw new NotFoundException(`Parent category with ID "${parentId}" not found`);
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Validate and create root category
+      if (!name || typeof name !== 'string' || name.trim() === '') {
+        throw new BadRequestException('Category name is required and cannot be empty');
       }
-    }
 
-    const slug = await this.generateUniqueSlug(name);
+      const trimmedName = name.trim();
+      const slug = await this.generateUniqueSlug(trimmedName, undefined, tx);
 
-    return this.prisma.category.create({
-      data: {
-        name,
-        slug,
-        description,
-        image,
-        isActive: isActive !== undefined ? isActive : true,
-        parentId,
-      },
-      include: {
-        parent: true,
-      },
+      const rootCategory = await tx.category.create({
+        data: {
+          name: trimmedName,
+          slug,
+          image,
+          isActive: isActive !== undefined ? isActive : true,
+        },
+      });
+
+      // 2. Create subcategories under root category if provided
+      if (subcategories && Array.isArray(subcategories) && subcategories.length > 0) {
+        for (const sub of subcategories) {
+          const subName = typeof sub === 'string' ? sub.trim() : (sub?.name ? String(sub.name).trim() : '');
+          if (!subName) {
+            throw new BadRequestException('Subcategory name is required and cannot be empty');
+          }
+
+          const subSlug = await this.generateUniqueSlug(subName, undefined, tx);
+
+          await tx.category.create({
+            data: {
+              name: subName,
+              slug: subSlug,
+              parentId: rootCategory.id,
+              isActive: true,
+            },
+          });
+        }
+      }
+
+      // 3. Return created root category with subCategories (without image or nested subCategories inside each subcategory)
+      return tx.category.findUnique({
+        where: { id: rootCategory.id },
+        include: {
+          subCategories: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              description: true,
+              isActive: true,
+              parentId: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+        },
+      });
     });
   }
 
   /**
    * Find all categories
-   * Supports searching by name/description, filtering by active status, rootsOnly, or returning as a structured tree.
+   * Supports pagination with meta response, searching by name/description, filtering by active status, rootsOnly, or tree hierarchy.
    */
-  async findAll(query: { search?: string; isActive?: string; rootsOnly?: string; tree?: string }) {
-    const { search, isActive, rootsOnly, tree } = query;
+  async findAll(query: CategoryQueryDto) {
+    const {
+      search,
+      isActive,
+      rootsOnly,
+      tree,
+      page = 1,
+      limit = 10,
+      sortBy = 'name',
+      sortOrder = 'asc',
+    } = query;
 
     const where: any = {};
 
@@ -112,39 +159,78 @@ export class CategoryService {
       where.parentId = null;
     }
 
-    // If tree view is requested, build nesting in-memory for efficiency
+    const subCategoriesInclude = {
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        isActive: true,
+        parentId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    };
+
+    const skip = (page - 1) * limit;
+
+    // If tree view is requested, return top-level root categories with their subcategories
     if (tree === 'true') {
-      const allCategories = await this.prisma.category.findMany({
+      where.parentId = null;
+
+      const total = await this.prisma.category.count({ where });
+
+      const roots = await this.prisma.category.findMany({
         where,
-        orderBy: { name: 'asc' },
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+        include: {
+          subCategories: subCategoriesInclude,
+        },
       });
 
-      const categoryMap = new Map<string, any>();
-      allCategories.forEach((cat) => {
-        categoryMap.set(cat.id, { ...cat, subCategories: [] });
-      });
+      const totalPages = Math.ceil(total / limit);
 
-      const roots: any[] = [];
-      allCategories.forEach((cat) => {
-        const mapped = categoryMap.get(cat.id);
-        if (cat.parentId && categoryMap.has(cat.parentId)) {
-          categoryMap.get(cat.parentId).subCategories.push(mapped);
-        } else {
-          // If the parent is not in the map (e.g. filtered out or doesn't exist), treat it as root
-          roots.push(mapped);
-        }
-      });
-
-      return roots;
+      return {
+        data: roots,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+      };
     }
 
-    return this.prisma.category.findMany({
+    const total = await this.prisma.category.count({ where });
+
+    const data = await this.prisma.category.findMany({
       where,
-      orderBy: { name: 'asc' },
+      skip,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder },
       include: {
         parent: true,
+        subCategories: subCategoriesInclude,
       },
     });
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    };
   }
 
   /**
@@ -153,12 +239,25 @@ export class CategoryService {
   async findOne(idOrSlug: string) {
     let category;
 
+    const subCategoriesInclude = {
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        isActive: true,
+        parentId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    };
+
     if (this.isUUID(idOrSlug)) {
       category = await this.prisma.category.findUnique({
         where: { id: idOrSlug },
         include: {
           parent: true,
-          subCategories: true,
+          subCategories: subCategoriesInclude,
         },
       });
     } else {
@@ -166,7 +265,7 @@ export class CategoryService {
         where: { slug: idOrSlug },
         include: {
           parent: true,
-          subCategories: true,
+          subCategories: subCategoriesInclude,
         },
       });
     }

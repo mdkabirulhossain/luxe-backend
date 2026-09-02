@@ -18,6 +18,7 @@ import { Role } from '@prisma/client';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { CategoryQueryDto } from './dto/category-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -33,31 +34,21 @@ export class CategoryController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth('JWT-auth')
   @ResponseMessage('Category created successfully')
-  @ApiOperation({ summary: 'Create a new category (Admin only)' })
-  @ApiResponse({ status: 201, description: 'Category successfully created.' })
-  @ApiResponse({ status: 400, description: 'Bad Request: Invalid DTO parameters or circular parent relationships.' })
+  @ApiOperation({ summary: 'Create a new category with optional subcategories (Admin only)' })
+  @ApiResponse({ status: 201, description: 'Category and optional subcategories successfully created.' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Invalid DTO parameters.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
   @ApiResponse({ status: 403, description: 'Forbidden: Insufficient privileges.' })
-  @ApiResponse({ status: 404, description: 'Not Found: Specified parent category does not exist.' })
   async create(@Body() createCategoryDto: CreateCategoryDto) {
     return this.categoryService.create(createCategoryDto);
   }
 
   @Get()
   @ResponseMessage('Categories retrieved successfully')
-  @ApiOperation({ summary: 'Get list of all categories' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search term for name or description' })
-  @ApiQuery({ name: 'isActive', required: false, description: 'Filter by active status (true/false)' })
-  @ApiQuery({ name: 'rootsOnly', required: false, description: 'Fetch only top-level categories (true)' })
-  @ApiQuery({ name: 'tree', required: false, description: 'Format categories as a nested tree hierarchy (true)' })
-  @ApiResponse({ status: 200, description: 'Categories list retrieved.' })
-  async findAll(
-    @Query('search') search?: string,
-    @Query('isActive') isActive?: string,
-    @Query('rootsOnly') rootsOnly?: string,
-    @Query('tree') tree?: string,
-  ) {
-    return this.categoryService.findAll({ search, isActive, rootsOnly, tree });
+  @ApiOperation({ summary: 'Get list of all categories with pagination and filters' })
+  @ApiResponse({ status: 200, description: 'Categories list retrieved with pagination metadata.' })
+  async findAll(@Query() query: CategoryQueryDto) {
+    return this.categoryService.findAll(query);
   }
 
   @Get(':idOrSlug')
