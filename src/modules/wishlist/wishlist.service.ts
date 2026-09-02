@@ -12,6 +12,14 @@ export class WishlistService {
   constructor(private readonly prisma: PrismaClientService) {}
 
   /**
+   * Helper to verify if id matches UUID pattern.
+   */
+  private isUUID(id: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id);
+  }
+
+  /**
    * Format Wishlist object to match high-level frontend interfaces with product & category details
    */
   private formatWishlistResponse(wishlist: any) {
@@ -33,12 +41,15 @@ export class WishlistService {
               title: p.name,
               slug: p.slug,
               sku: p.sku || '',
+              description: p.description || '',
               price: p.price,
+              currentPrice: p.price,
               originalPrice: p.originalPrice ?? null,
               discount: p.discount ?? 0,
               images: p.images || [],
               image: primaryImage,
               stock: p.stock,
+              stockQuantity: p.stock,
               inStock: p.inStock,
               isActive: p.isActive,
               isBestSeller: p.isBestSeller,
@@ -66,6 +77,8 @@ export class WishlistService {
                     slug: p.subCategory.slug,
                   }
                 : null,
+              createdAt: p.createdAt,
+              updatedAt: p.updatedAt,
             }
           : null,
       };
@@ -127,6 +140,10 @@ export class WishlistService {
    * Adds a product to the user's wishlist.
    */
   async addToWishlist(userId: string, productId: string) {
+    if (!this.isUUID(productId)) {
+      throw new BadRequestException('Invalid UUID format for productId');
+    }
+
     // 1. Verify that the product exists
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
@@ -175,6 +192,10 @@ export class WishlistService {
    * Perfect for single heart-icon toggle buttons on product cards.
    */
   async toggleWishlist(userId: string, productId: string) {
+    if (!this.isUUID(productId)) {
+      throw new BadRequestException('Invalid UUID format for productId');
+    }
+
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
     });
@@ -237,6 +258,10 @@ export class WishlistService {
    * Checks whether a specific product is in the user's wishlist.
    */
   async checkWishlistStatus(userId: string, productId: string) {
+    if (!this.isUUID(productId)) {
+      return { isWishlisted: false };
+    }
+
     const wishlist = await this.prisma.wishlist.findUnique({
       where: { userId },
     });
@@ -261,6 +286,9 @@ export class WishlistService {
    * Removes a product from the user's wishlist.
    */
   async removeFromWishlist(userId: string, productId: string) {
+    if (!this.isUUID(productId)) {
+      throw new BadRequestException('Invalid UUID format for productId');
+    }
     const wishlist = await this.prisma.wishlist.findUnique({
       where: { userId },
     });

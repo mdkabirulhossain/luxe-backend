@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   UnauthorizedException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { WishlistService } from './wishlist.service';
@@ -74,7 +75,10 @@ export class WishlistController {
   @ApiOperation({ summary: 'Check if a specific product is in the user wishlist' })
   @ApiResponse({ status: 200, description: 'Wishlist status returned successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async checkWishlistStatus(@Request() req: AuthenticatedRequest, @Param('productId') productId: string) {
+  async checkWishlistStatus(
+    @Request() req: AuthenticatedRequest,
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
     const userId = req.user?.sub;
     if (!userId) {
       throw new UnauthorizedException('User session not found');
@@ -104,7 +108,10 @@ export class WishlistController {
   @ApiResponse({ status: 200, description: 'Product successfully removed from wishlist.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 404, description: 'Not Found: Product or wishlist not found.' })
-  async removeFromWishlist(@Request() req: AuthenticatedRequest, @Param('productId') productId: string) {
+  async removeFromWishlist(
+    @Request() req: AuthenticatedRequest,
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
     const userId = req.user?.sub;
     if (!userId) {
       throw new UnauthorizedException('User session not found');
