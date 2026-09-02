@@ -208,6 +208,12 @@ export class OrderService {
         },
       });
 
+      // 4. Clear user's cart items if cart exists
+      const userCart = await tx.cart.findUnique({ where: { userId } });
+      if (userCart) {
+        await tx.cartItem.deleteMany({ where: { cartId: userCart.id } });
+      }
+
       return this.formatOrderResponse(order);
     });
   }
