@@ -50,7 +50,8 @@ model Category {
   parent      Category? @relation("SubCategories", fields: [parentId], references: [id])
   subCategories Category[] @relation("SubCategories")
 
-  products    Product[]
+  products    Product[] @relation("ProductCategory")
+  subProducts Product[] @relation("ProductSubCategory")
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -59,16 +60,30 @@ model Category {
 model Product {
   id              String   @id @default(uuid())
   name            String
+  sku             String?  @unique
   slug            String   @unique
   description     String?
   price           Float
-  discountPrice   Float?
+  originalPrice   Float?
+  discount        Int?
   images          String[]
   stock           Int      @default(0)
+  inStock         Boolean  @default(true)
   isActive        Boolean  @default(true)
+  isBestSeller    Boolean  @default(false)
+  isHot           Boolean  @default(false)
+  isNew           Boolean  @default(true)
+  colors          String[]
+  colorVariants   Json?
+  sizes           String[]
+  rating          Float    @default(0)
+  reviewsCount    Int      @default(0)
 
   categoryId      String
-  category        Category @relation(fields: [categoryId], references: [id])
+  category        Category @relation("ProductCategory", fields: [categoryId], references: [id])
+
+  subCategoryId   String?
+  subCategory     Category? @relation("ProductSubCategory", fields: [subCategoryId], references: [id])
 
   cartItems       CartItem[]
   wishlistItems   WishlistItem[]

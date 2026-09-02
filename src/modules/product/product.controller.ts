@@ -34,19 +34,20 @@ export class ProductController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth('JWT-auth')
   @ResponseMessage('Product created successfully')
-  @ApiOperation({ summary: 'Create a new product (Admin only)' })
+  @ApiOperation({ summary: 'Create a new product with optional subcategory & color variants (Admin only)' })
   @ApiResponse({ status: 201, description: 'Product successfully created.' })
-  @ApiResponse({ status: 400, description: 'Bad Request: Invalid parameters or discountPrice >= price.' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Invalid parameters or category mismatch.' })
   @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
   @ApiResponse({ status: 403, description: 'Forbidden: Insufficient privileges.' })
-  @ApiResponse({ status: 404, description: 'Not Found: Category not found.' })
+  @ApiResponse({ status: 404, description: 'Not Found: Main Category or Subcategory not found.' })
+  @ApiResponse({ status: 409, description: 'Conflict: SKU already exists.' })
   async create(@Body() createProductDto: CreateProductDto) {
     return this.productService.create(createProductDto);
   }
 
   @Get()
   @ResponseMessage('Products retrieved successfully')
-  @ApiOperation({ summary: 'Get paginated list of products with filters' })
+  @ApiOperation({ summary: 'Get paginated list of products matching ProductCardData contract (Public)' })
   @ApiResponse({ status: 200, description: 'Products retrieved successfully.' })
   async findAll(@Query() query: ProductQueryDto) {
     return this.productService.findAll(query);
@@ -54,8 +55,8 @@ export class ProductController {
 
   @Get(':idOrSlug')
   @ResponseMessage('Product details retrieved successfully')
-  @ApiOperation({ summary: 'Get a single product by ID or unique slug' })
-  @ApiResponse({ status: 200, description: 'Product retrieved.' })
+  @ApiOperation({ summary: 'Get a single product matching ProductDetails contract by ID or unique slug (Public)' })
+  @ApiResponse({ status: 200, description: 'Product retrieved successfully.' })
   @ApiResponse({ status: 404, description: 'Not Found: Product not found.' })
   async findOne(@Param('idOrSlug') idOrSlug: string) {
     return this.productService.findOne(idOrSlug);
@@ -68,10 +69,11 @@ export class ProductController {
   @ResponseMessage('Product updated successfully')
   @ApiOperation({ summary: 'Update an existing product (Admin only)' })
   @ApiResponse({ status: 200, description: 'Product successfully updated.' })
-  @ApiResponse({ status: 400, description: 'Bad Request: Invalid parameters or discountPrice >= price.' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Invalid parameters or category mismatch.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden: Insufficient privileges.' })
   @ApiResponse({ status: 404, description: 'Not Found: Product or Category not found.' })
+  @ApiResponse({ status: 409, description: 'Conflict: SKU already exists.' })
   async update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
     return this.productService.update(id, updateProductDto);
   }
@@ -92,4 +94,3 @@ export class ProductController {
     return this.productService.remove(id);
   }
 }
-

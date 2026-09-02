@@ -41,10 +41,8 @@ export class OrderService {
           );
         }
 
-        // Use discountPrice if active, otherwise fallback to regular price
-        const finalPrice = product.discountPrice !== null && product.discountPrice !== undefined
-          ? product.discountPrice
-          : product.price;
+        // Use active selling price
+        const finalPrice = product.price;
 
         totalAmount += finalPrice * item.quantity;
 
