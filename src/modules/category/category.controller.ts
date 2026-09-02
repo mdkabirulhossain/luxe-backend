@@ -65,12 +65,13 @@ export class CategoryController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth('JWT-auth')
   @ResponseMessage('Category updated successfully')
-  @ApiOperation({ summary: 'Update an existing category (Admin only)' })
-  @ApiResponse({ status: 200, description: 'Category updated.' })
-  @ApiResponse({ status: 400, description: 'Bad Request: Self-referential or circular parent dependency.' })
-  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiOperation({ summary: 'Update an existing category and optional subcategories (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Category updated successfully.' })
+  @ApiResponse({ status: 400, description: 'Bad Request: Invalid DTO parameters.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized: Missing or invalid token.' })
   @ApiResponse({ status: 403, description: 'Forbidden: Insufficient privileges.' })
-  @ApiResponse({ status: 404, description: 'Not Found: Category or specified parent category not found.' })
+  @ApiResponse({ status: 404, description: 'Not Found: Category not found.' })
+  @ApiResponse({ status: 409, description: 'Conflict: Category or subcategory with the same name already exists.' })
   async update(@Param('id') id: string, @Body() updateCategoryDto: UpdateCategoryDto) {
     return this.categoryService.update(id, updateCategoryDto);
   }

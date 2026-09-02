@@ -1,9 +1,14 @@
 /* eslint-disable prettier/prettier */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsNotEmpty, IsOptional, IsString, ValidateNested, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested, MinLength } from 'class-validator';
 
 export class CreateSubCategoryDto {
+  @ApiPropertyOptional({ example: '3f9188a1-052b-4d92-801e-cd124b899aef', description: 'Optional subcategory ID if referencing or updating an existing subcategory' })
+  @IsUUID()
+  @IsOptional()
+  id?: string;
+
   @ApiProperty({ example: 'Men Fashion', description: 'Name of the subcategory' })
   @IsString()
   @IsNotEmpty()
@@ -29,7 +34,7 @@ export class CreateCategoryDto {
 
   @ApiPropertyOptional({
     example: [{ name: 'Men Fashion' }, { name: 'Women Fashion' }],
-    description: 'Optional array of subcategory objects (with name) or string names to create under this category',
+    description: 'Optional array of subcategory objects (with name) to create under this category',
     type: [CreateSubCategoryDto],
   })
   @IsArray()
@@ -38,5 +43,3 @@ export class CreateCategoryDto {
   @Type(() => CreateSubCategoryDto)
   subcategories?: (CreateSubCategoryDto | string)[];
 }
-
-
