@@ -18,6 +18,7 @@ import { ReviewModule } from './modules/review/review.module';
 import { CouponModule } from './modules/coupon/coupon.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { UploadModule } from './modules/upload/upload.module';
+import { PaymentModule } from './modules/payment/payment.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { UploadModule } from './modules/upload/upload.module';
     CouponModule,
     AdminModule,
     UploadModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [

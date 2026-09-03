@@ -31,6 +31,7 @@ model User {
   cart              Cart?
   wishlist          Wishlist?
   orders            Order[]
+  payments          Payment[]
   addresses         Address[]
   reviews           Review[]
   couponUsages      CouponUsage[]
@@ -153,6 +154,7 @@ model Order {
   shippingAddress Json
 
   items       OrderItem[]
+  payment     Payment?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
@@ -205,6 +207,31 @@ enum OrderStatus {
   SHIPPED
   DELIVERED
   CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ====================== PAYMENT ======================
+model Payment {
+  id                    String        @id @default(uuid())
+  orderId               String        @unique
+  order                 Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripePaymentIntentId String?       @unique
+  stripeClientSecret    String?
+  amount                Float
+  currency              String        @default("usd")
+  status                PaymentStatus @default(PENDING)
+  paymentMethod         String?       @default("stripe")
+  receiptUrl            String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 }
 
 enum DiscountType {
