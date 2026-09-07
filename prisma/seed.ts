@@ -14,6 +14,8 @@ import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { Pool } from 'pg';
+
 // Manual .env loader to avoid dependency on the 'dotenv' module/types in typescript compilation
 function loadEnv() {
   try {
@@ -31,7 +33,9 @@ function loadEnv() {
           ) {
             value = value.slice(1, -1);
           }
-          process.env[key] = value;
+          if (!process.env[key]) {
+            process.env[key] = value;
+          }
         }
       });
     }
@@ -42,7 +46,8 @@ function loadEnv() {
 
 loadEnv();
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
