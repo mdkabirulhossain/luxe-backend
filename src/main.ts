@@ -63,11 +63,19 @@ async function bootstrap() {
   const port = process.env.PORT || 5000;
 
   // Configure Swagger Options
-  const config = new DocumentBuilder()
+  const swaggerBuilder = new DocumentBuilder()
     .setTitle('Luxe E-Commerce API')
     .setDescription('The Luxe E-Commerce backend API description')
     .setVersion('1.0')
-    .addServer(`http://localhost:${port}`, 'Local Development Server')
+    .addServer('/', 'Default (Current Host)');
+
+  if (process.env.RENDER_EXTERNAL_URL) {
+    swaggerBuilder.addServer(process.env.RENDER_EXTERNAL_URL, 'Production Server (Render)');
+  }
+
+  swaggerBuilder.addServer(`http://localhost:${port}`, 'Local Development Server');
+
+  const config = swaggerBuilder
     .addBearerAuth(
       {
         type: 'http',
