@@ -8,7 +8,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import * as dns from 'dns';
 
-// Force Node.js to prefer IPv4 over IPv6 globally to prevent ENETUNREACH on cloud environments like Render
+// Force Node.js to prefer IPv4 over IPv6 globally to prevent ENETUNREACH on cloud environments like Railway
 try {
   dns.setDefaultResultOrder?.('ipv4first');
 } catch (e) {
@@ -77,8 +77,10 @@ async function bootstrap() {
     .setVersion('1.0')
     .addServer('/', 'Default (Current Host)');
 
-  if (process.env.RENDER_EXTERNAL_URL) {
-    swaggerBuilder.addServer(process.env.RENDER_EXTERNAL_URL, 'Production Server (Render)');
+  const railwayUrl = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL;
+  if (railwayUrl) {
+    const formattedUrl = railwayUrl.startsWith('http') ? railwayUrl : `https://${railwayUrl}`;
+    swaggerBuilder.addServer(formattedUrl, 'Production Server (Railway)');
   }
 
   swaggerBuilder.addServer(`http://localhost:${port}`, 'Local Development Server');

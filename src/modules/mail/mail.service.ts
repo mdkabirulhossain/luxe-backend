@@ -27,16 +27,6 @@ export class MailService {
     const pass = rawPass ? rawPass.replace(/\s+/g, '') : undefined;
     let secureEnv = String(this.configService.get<string | boolean>('SMTP_SECURE') ?? '').trim();
 
-    // Smart Brevo Auto-Detector: If password is a Brevo key (starts with xsmtpsib- or xkeysib-)
-    if (pass && (pass.startsWith('xsmtpsib-') || pass.startsWith('xkeysib-'))) {
-      host = 'smtp-relay.brevo.com';
-      port = 587;
-      secureEnv = 'false';
-      if (!user || !user.includes('@smtp-brevo.com')) {
-        user = '835d50001@smtp-brevo.com';
-      }
-    }
-
     if (!host) host = 'smtp.gmail.com';
     const portNum = port ? Number(port) : 465;
     const secure = secureEnv === 'true' || portNum === 465;
@@ -139,7 +129,7 @@ export class MailService {
     }
 
     // 3. Fallback: Dev mode logging
-    this.logger.warn(`[DEV MODE / UNCONFIGURED MAILER] Real email NOT sent to ${to}. Set BREVO_API_KEY or SMTP variables.`);
+    this.logger.warn(`[DEV MODE / UNCONFIGURED MAILER] Real email NOT sent to ${to}. Set SMTP environment variables.`);
     this.logger.log(`
 =========================================
 [DEV MODE — EMAIL NOT SENT]
