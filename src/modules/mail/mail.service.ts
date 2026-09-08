@@ -1,12 +1,11 @@
 /* eslint-disable prettier/prettier */
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Resend } from 'resend';
 import * as nodemailer from 'nodemailer';
 import * as dns from 'dns';
 
 // Custom DNS lookup function to guarantee Nodemailer ONLY uses IPv4 addresses (family 4)
-// This fixes the Render error: "connect ENETUNREACH 2607:f8b0:400e:c0d::6c:465"
+// This fixes cloud server errors like "connect ENETUNREACH 2607:f8b0:400e:c0d::6c:465"
 const customIpv4Lookup = (
   hostname: string,
   options: any,
@@ -17,25 +16,18 @@ const customIpv4Lookup = (
 
 @Injectable()
 export class MailService {
-  private resend: Resend | null = null;
   private transporter: nodemailer.Transporter | null = null;
   private readonly logger = new Logger(MailService.name);
 
   constructor(private configService: ConfigService) {
-    const resendApiKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
-    if (resendApiKey) {
-      this.resend = new Resend(resendApiKey);
-      this.logger.log('Resend HTTPS Mailer API initialized successfully');
-    }
-
     const host = this.configService.get<string>('SMTP_HOST')?.trim() || 'smtp.gmail.com';
     const port = this.configService.get<number | string>('SMTP_PORT');
-    const user = this.configService.get<string>('SMTP_USER')?.trim();
-    const rawPass = this.configService.get<string>('SMTP_PASS')?.trim();
+    const user = this.configService.get<string>('SMTP_USER')?.trim() || this.configService.get<string>('BREVO_SENDER_EMAIL')?.trim();
+    const rawPass = this.configService.get<string>('SMTP_PASS')?.trim() || this.configService.get<string>('BREVO_API_KEY')?.trim();
     const pass = rawPass ? rawPass.replace(/\s+/g, '') : undefined;
     const secureEnv = String(this.configService.get<string | boolean>('SMTP_SECURE') ?? '').trim();
 
-    const portNum = port ? Number(port) : 465;
+    const portNum = port ? Number(port) : 587;
     const secure = secureEnv === 'true' || portNum === 465;
 
     const isValidConfig =
@@ -102,36 +94,41 @@ export class MailService {
   }
 
   private async sendMail(to: string, subject: string, text: string, html: string): Promise<boolean> {
-    // 1. Try Resend HTTPS API First (Port 443 - Never blocked on Render/Cloud)
-    if (this.resend) {
+    // 1. Try Brevo HTTPS REST API First (Port 443 - Zero domain required, 300 free emails/day to ANY recipient)
+    const brevoApiKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
+    if (brevoApiKey) {
       try {
-        let from =
-          this.configService.get<string>('RESEND_FROM') ||
-          this.configService.get<string>('SMTP_FROM') ||
-          'Luxe E-Commerce <onboarding@resend.dev>';
-        from = from.replace(/^["']|["']$/g, '').trim();
+        const senderEmail =
+          this.configService.get<string>('BREVO_SENDER_EMAIL')?.trim() ||
+          this.configService.get<string>('SMTP_USER')?.trim() ||
+          'mdkabirulhossainj@gmail.com';
 
-        const response = await this.resend.emails.send({
-          from,
-          to,
-          subject,
-          text,
-          html,
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'api-key': brevoApiKey,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            sender: { name: 'Luxe E-Commerce', email: senderEmail },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html,
+            textContent: text,
+          }),
         });
 
-        if (response.error) {
-          this.logger.error(`Resend API returned error for ${to}: ${response.error.message}`);
-          if (response.error.message?.includes('only send testing emails')) {
-            this.logger.warn(
-              `NOTE: Resend default onboarding@resend.dev domain restricts testing emails to account owner. Add and verify your domain at resend.com/domains to send to any recipient.`,
-            );
-          }
-        } else if (response.data?.id) {
-          this.logger.log(`Email sent successfully to ${to} via Resend HTTPS API (id: ${response.data.id})`);
+        if (response.ok) {
+          const resData: any = await response.json();
+          this.logger.log(`Email sent successfully to ${to} via Brevo HTTPS API (messageId: ${resData.messageId || 'ok'})`);
           return true;
+        } else {
+          const errData: any = await response.json();
+          this.logger.error(`Brevo API returned error for ${to}: ${JSON.stringify(errData)}`);
         }
-      } catch (resendErr) {
-        this.logger.error(`Resend API request failed for ${to}: ${(resendErr as Error).message}`);
+      } catch (err) {
+        this.logger.error(`Brevo API request failed for ${to}: ${(err as Error).message}`);
       }
     }
 
@@ -158,7 +155,7 @@ export class MailService {
     }
 
     // 3. Fallback: Dev mode logging
-    this.logger.warn(`[DEV MODE / UNCONFIGURED MAILER] Real email NOT sent to ${to}. Set RESEND_API_KEY or SMTP variables.`);
+    this.logger.warn(`[DEV MODE / UNCONFIGURED MAILER] Real email NOT sent to ${to}. Set BREVO_API_KEY or SMTP variables.`);
     this.logger.log(`
 =========================================
 [DEV MODE — EMAIL NOT SENT]
