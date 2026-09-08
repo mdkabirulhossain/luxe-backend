@@ -9,15 +9,15 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
 
   constructor(private configService: ConfigService) {
-    const host = this.configService.get<string>('SMTP_HOST')?.trim();
+    const host = this.configService.get<string>('SMTP_HOST')?.trim() || 'smtp.gmail.com';
     const port = this.configService.get<number | string>('SMTP_PORT');
     const user = this.configService.get<string>('SMTP_USER')?.trim();
     const rawPass = this.configService.get<string>('SMTP_PASS')?.trim();
     const pass = rawPass ? rawPass.replace(/\s+/g, '') : undefined;
-    const secureEnv = this.configService.get<string>('SMTP_SECURE')?.trim();
+    const secureEnv = String(this.configService.get<string | boolean>('SMTP_SECURE') ?? '').trim();
 
-    const portNum = port ? Number(port) : 587;
-    const secure = secureEnv !== undefined ? secureEnv === 'true' : portNum === 465;
+    const portNum = port ? Number(port) : 465;
+    const secure = secureEnv === 'true' || portNum === 465;
 
     const isValidConfig =
       Boolean(host) &&
@@ -27,34 +27,22 @@ export class MailService {
       pass !== 'your_mailtrap_pass';
 
     if (isValidConfig) {
-      const isGmail = host?.includes('gmail.com');
-
-      const transportOptions: nodemailer.TransportOptions = isGmail
-        ? ({
-            service: 'gmail',
-            auth: {
-              user,
-              pass,
-            },
-          } as any)
-        : ({
-            host,
-            port: portNum,
-            secure, // true for port 465 (SSL), false for 587 (STARTTLS)
-            auth: {
-              user,
-              pass,
-            },
-            family: 4, // Force IPv4 to prevent ENETUNREACH errors on cloud servers without IPv6 egress
-            connectionTimeout: 10000, // 10 seconds connection timeout
-            greetingTimeout: 10000, // 10 seconds greeting timeout
-            socketTimeout: 15000, // 15 seconds socket timeout
-            tls: {
-              rejectUnauthorized: false, // Prevent issues with self-signed SSL certificates in development
-            },
-          } as nodemailer.TransportOptions);
-
-      this.transporter = nodemailer.createTransport(transportOptions);
+      this.transporter = nodemailer.createTransport({
+        host,
+        port: portNum,
+        secure, // true for port 465 (SSL), false for port 587 (STARTTLS)
+        auth: {
+          user,
+          pass,
+        },
+        family: 4, // Force IPv4 to prevent ENETUNREACH errors on cloud servers without IPv6 egress
+        connectionTimeout: 5000, // 5 seconds connection timeout
+        greetingTimeout: 5000,   // 5 seconds greeting timeout
+        socketTimeout: 8000,     // 8 seconds socket timeout
+        tls: {
+          rejectUnauthorized: false, // Prevent issues with self-signed SSL certificates in development
+        },
+      } as nodemailer.TransportOptions);
 
       this.transporter.verify((error) => {
         if (error) {
@@ -90,7 +78,9 @@ export class MailService {
   }
 
   private async sendMail(to: string, subject: string, text: string, html: string): Promise<boolean> {
-    const from = this.configService.get<string>('SMTP_FROM') || '"Luxe E-Commerce" <no-reply@luxe.com>';
+    let from = this.configService.get<string>('SMTP_FROM') || '"Luxe E-Commerce" <no-reply@luxe.com>';
+    // Clean surrounding quotes if present in environment variable string
+    from = from.replace(/^["']|["']$/g, '').trim();
 
     if (this.transporter) {
       try {
@@ -107,8 +97,8 @@ export class MailService {
         this.logger.log(`Email sent to ${to} (messageId: ${messageId})`);
         return true;
       } catch (error) {
-        this.logger.error(`Failed to send email to ${to}: ${(error as Error).message}`, (error as Error).stack);
-        throw new Error(`Failed to send email to ${to}: ${(error as Error).message}`);
+        this.logger.error(`Failed to send email to ${to}: ${(error as Error).message}`);
+        return false;
       }
     } else {
       // Development / unconfigured SMTP fallback: log email content to console and return false

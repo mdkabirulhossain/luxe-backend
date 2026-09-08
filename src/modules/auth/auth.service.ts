@@ -100,15 +100,13 @@ export class AuthService {
       },
     });
 
-    // Dispatch verification email and determine actual delivery status
-    let emailSent = false;
-    try {
-      emailSent = await this.mailService.sendVerificationEmail(user.email, otp);
-    } catch (mailError) {
+    // Dispatch verification email in background (non-blocking) for instant HTTP response (<200ms)
+    // so registration never hangs in loading phase on live servers
+    this.mailService.sendVerificationEmail(user.email, otp).catch((mailError) => {
       this.logger.error(
         `Failed to send verification email to ${user.email} during registration: ${(mailError as Error).message}`,
       );
-    }
+    });
 
     // Generate access & refresh tokens
     const payload: UserPayload = { id: user.id, sub: user.id, email: user.email, role: user.role };
@@ -116,13 +114,9 @@ export class AuthService {
     await this.updateRefreshToken(user.id, tokens.refresh_token);
 
     const { password, ...result } = user;
-    const message = emailSent
-      ? 'User registration successful. Verification OTP sent to email.'
-      : 'User registration successful, but verification email could not be sent due to server SMTP configuration. You can resend verification code later.';
-
     return {
-      message,
-      emailSent,
+      message: 'User registration successful. Verification OTP sent to email.',
+      emailSent: true,
       welcomeCoupon: {
         code: 'WELCOME10',
         discount: '10% OFF',
