@@ -41,7 +41,12 @@ export class MailService {
     if (isValidConfig) {
       const isGmail = host.toLowerCase().includes('gmail.com');
 
-      const transportOptions: any = isGmail
+      // Use service: 'gmail' only when using default port 465 with SSL.
+      // If port 587 is specified, use standard host/port transport options (STARTTLS)
+      // to avoid cloud firewall port 465 connection timeouts on Railway/Render.
+      const useGmailService = isGmail && portNum === 465;
+
+      const transportOptions: any = useGmailService
         ? {
             service: 'gmail',
             auth: {
