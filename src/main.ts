@@ -6,6 +6,14 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { BadRequestException, ValidationPipe, ValidationError } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import * as dns from 'dns';
+
+// Force Node.js to prefer IPv4 over IPv6 globally to prevent ENETUNREACH on cloud environments like Render
+try {
+  dns.setDefaultResultOrder?.('ipv4first');
+} catch (e) {
+  // Ignore if not supported in environment
+}
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);

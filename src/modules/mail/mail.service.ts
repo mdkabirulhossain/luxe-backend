@@ -2,6 +2,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import * as dns from 'dns';
+
+// Custom DNS lookup function to guarantee Nodemailer ONLY uses IPv4 addresses (family 4)
+// This fixes the Render error: "connect ENETUNREACH 2607:f8b0:400e:c0d::6c:465"
+const customIpv4Lookup = (
+  hostname: string,
+  options: any,
+  callback: (err: NodeJS.ErrnoException | null, address: string | any, family?: number) => void,
+) => {
+  return dns.lookup(hostname, { family: 4 }, callback);
+};
 
 @Injectable()
 export class MailService {
@@ -35,14 +46,15 @@ export class MailService {
           user,
           pass,
         },
-        family: 4, // Force IPv4 to prevent ENETUNREACH errors on cloud servers without IPv6 egress
-        connectionTimeout: 5000, // 5 seconds connection timeout
-        greetingTimeout: 5000,   // 5 seconds greeting timeout
-        socketTimeout: 8000,     // 8 seconds socket timeout
+        family: 4, // Force IPv4 socket family
+        lookup: customIpv4Lookup, // Force IPv4 DNS lookup to prevent ENETUNREACH on Render
+        connectionTimeout: 10000, // 10 seconds connection timeout
+        greetingTimeout: 10000,   // 10 seconds greeting timeout
+        socketTimeout: 15000,     // 15 seconds socket timeout
         tls: {
           rejectUnauthorized: false, // Prevent issues with self-signed SSL certificates in development
         },
-      } as nodemailer.TransportOptions);
+      } as any);
 
       this.transporter.verify((error) => {
         if (error) {
