@@ -1,6 +1,7 @@
 /* eslint-disable prettier/prettier */
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Resend } from 'resend';
 import * as nodemailer from 'nodemailer';
 import * as dns from 'dns';
 
@@ -16,10 +17,17 @@ const customIpv4Lookup = (
 
 @Injectable()
 export class MailService {
+  private resend: Resend | null = null;
   private transporter: nodemailer.Transporter | null = null;
   private readonly logger = new Logger(MailService.name);
 
   constructor(private configService: ConfigService) {
+    const resendApiKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
+    if (resendApiKey) {
+      this.resend = new Resend(resendApiKey);
+      this.logger.log('Resend HTTPS Mailer API initialized successfully');
+    }
+
     const host = this.configService.get<string>('SMTP_HOST')?.trim() || 'smtp.gmail.com';
     const port = this.configService.get<number | string>('SMTP_PORT');
     const user = this.configService.get<string>('SMTP_USER')?.trim();
@@ -38,35 +46,39 @@ export class MailService {
       pass !== 'your_mailtrap_pass';
 
     if (isValidConfig) {
-      this.transporter = nodemailer.createTransport({
-        host,
-        port: portNum,
-        secure, // true for port 465 (SSL), false for port 587 (STARTTLS)
-        auth: {
-          user,
-          pass,
-        },
-        family: 4, // Force IPv4 socket family
-        lookup: customIpv4Lookup, // Force IPv4 DNS lookup to prevent ENETUNREACH on Render
-        connectionTimeout: 10000, // 10 seconds connection timeout
-        greetingTimeout: 10000,   // 10 seconds greeting timeout
-        socketTimeout: 15000,     // 15 seconds socket timeout
-        tls: {
-          rejectUnauthorized: false, // Prevent issues with self-signed SSL certificates in development
-        },
-      } as any);
+      const isGmail = host.toLowerCase().includes('gmail.com');
 
-      this.transporter.verify((error) => {
-        if (error) {
-          this.logger.error(`SMTP connection verification failed (${host}:${portNum}): ${error.message}`);
-        } else {
-          this.logger.log(`Mailer SMTP connected successfully (${host}:${portNum}, secure=${secure})`);
-        }
-      });
-    } else {
-      this.logger.warn(
-        'SMTP configuration is missing or incomplete in environment variables (SMTP_USER / SMTP_PASS). Verification emails will NOT be sent via SMTP.',
-      );
+      const transportOptions: any = isGmail
+        ? {
+            service: 'gmail',
+            auth: {
+              user,
+              pass,
+            },
+            lookup: customIpv4Lookup,
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
+          }
+        : {
+            host,
+            port: portNum,
+            secure,
+            auth: {
+              user,
+              pass,
+            },
+            family: 4,
+            lookup: customIpv4Lookup,
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
+            tls: {
+              rejectUnauthorized: false,
+            },
+          };
+
+      this.transporter = nodemailer.createTransport(transportOptions);
     }
   }
 
@@ -90,13 +102,45 @@ export class MailService {
   }
 
   private async sendMail(to: string, subject: string, text: string, html: string): Promise<boolean> {
-    let from = this.configService.get<string>('SMTP_FROM') || '"Luxe E-Commerce" <no-reply@luxe.com>';
-    // Clean surrounding quotes if present in environment variable string
-    from = from.replace(/^["']|["']$/g, '').trim();
+    // 1. Try Resend HTTPS API First (Port 443 - Never blocked on Render/Cloud)
+    if (this.resend) {
+      try {
+        let from =
+          this.configService.get<string>('RESEND_FROM') ||
+          this.configService.get<string>('SMTP_FROM') ||
+          'Luxe E-Commerce <onboarding@resend.dev>';
+        from = from.replace(/^["']|["']$/g, '').trim();
 
+        const response = await this.resend.emails.send({
+          from,
+          to,
+          subject,
+          text,
+          html,
+        });
+
+        if (response.error) {
+          this.logger.error(`Resend API returned error for ${to}: ${response.error.message}`);
+          if (response.error.message?.includes('only send testing emails')) {
+            this.logger.warn(
+              `NOTE: Resend default onboarding@resend.dev domain restricts testing emails to account owner. Add and verify your domain at resend.com/domains to send to any recipient.`,
+            );
+          }
+        } else if (response.data?.id) {
+          this.logger.log(`Email sent successfully to ${to} via Resend HTTPS API (id: ${response.data.id})`);
+          return true;
+        }
+      } catch (resendErr) {
+        this.logger.error(`Resend API request failed for ${to}: ${(resendErr as Error).message}`);
+      }
+    }
+
+    // 2. Fallback to Nodemailer SMTP
     if (this.transporter) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        let from = this.configService.get<string>('SMTP_FROM') || '"Luxe E-Commerce" <no-reply@luxe.com>';
+        from = from.replace(/^["']|["']$/g, '').trim();
+
         const info: any = await this.transporter.sendMail({
           from,
           to,
@@ -104,28 +148,27 @@ export class MailService {
           text,
           html,
         });
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         const messageId = String(info?.messageId || 'unknown');
-        this.logger.log(`Email sent to ${to} (messageId: ${messageId})`);
+        this.logger.log(`Email sent to ${to} via SMTP (messageId: ${messageId})`);
         return true;
       } catch (error) {
-        this.logger.error(`Failed to send email to ${to}: ${(error as Error).message}`);
+        this.logger.error(`Failed to send email via SMTP to ${to}: ${(error as Error).message}`);
         return false;
       }
-    } else {
-      // Development / unconfigured SMTP fallback: log email content to console and return false
-      this.logger.warn(`[DEV MODE / UNCONFIGURED SMTP] Real email NOT sent to ${to}. Set SMTP environment variables on live server.`);
-      this.logger.log(`
+    }
+
+    // 3. Fallback: Dev mode logging
+    this.logger.warn(`[DEV MODE / UNCONFIGURED MAILER] Real email NOT sent to ${to}. Set RESEND_API_KEY or SMTP variables.`);
+    this.logger.log(`
 =========================================
-[DEV MODE — EMAIL NOT SENT VIA SMTP]
+[DEV MODE — EMAIL NOT SENT]
 To: ${to}
 Subject: ${subject}
 -----------------------------------------
 ${text}
 =========================================
-      `);
-      return false;
-    }
+    `);
+    return false;
   }
 
   // ────────────────────────────────────────────────────────────────
