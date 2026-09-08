@@ -20,13 +20,24 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
 
   constructor(private configService: ConfigService) {
-    const host = this.configService.get<string>('SMTP_HOST')?.trim() || 'smtp.gmail.com';
-    const port = this.configService.get<number | string>('SMTP_PORT');
-    const user = this.configService.get<string>('SMTP_USER')?.trim() || this.configService.get<string>('BREVO_SENDER_EMAIL')?.trim();
+    let host = this.configService.get<string>('SMTP_HOST')?.trim();
+    let port = this.configService.get<number | string>('SMTP_PORT');
+    let user = this.configService.get<string>('SMTP_USER')?.trim() || this.configService.get<string>('BREVO_SENDER_EMAIL')?.trim();
     const rawPass = this.configService.get<string>('SMTP_PASS')?.trim() || this.configService.get<string>('BREVO_API_KEY')?.trim();
     const pass = rawPass ? rawPass.replace(/\s+/g, '') : undefined;
-    const secureEnv = String(this.configService.get<string | boolean>('SMTP_SECURE') ?? '').trim();
+    let secureEnv = String(this.configService.get<string | boolean>('SMTP_SECURE') ?? '').trim();
 
+    // Smart Brevo Auto-Detector: If password is a Brevo key (starts with xsmtpsib- or xkeysib-)
+    if (pass && (pass.startsWith('xsmtpsib-') || pass.startsWith('xkeysib-'))) {
+      host = 'smtp-relay.brevo.com';
+      port = 587;
+      secureEnv = 'false';
+      if (!user || !user.includes('@smtp-brevo.com')) {
+        user = '835d50001@smtp-brevo.com';
+      }
+    }
+
+    if (!host) host = 'smtp.gmail.com';
     const portNum = port ? Number(port) : 587;
     const secure = secureEnv === 'true' || portNum === 465;
 
