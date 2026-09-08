@@ -22,8 +22,8 @@ export class MailService {
   constructor(private configService: ConfigService) {
     let host = this.configService.get<string>('SMTP_HOST')?.trim();
     let port = this.configService.get<number | string>('SMTP_PORT');
-    let user = this.configService.get<string>('SMTP_USER')?.trim() || this.configService.get<string>('BREVO_SENDER_EMAIL')?.trim();
-    const rawPass = this.configService.get<string>('SMTP_PASS')?.trim() || this.configService.get<string>('BREVO_API_KEY')?.trim();
+    let user = this.configService.get<string>('SMTP_USER')?.trim();
+    const rawPass = this.configService.get<string>('SMTP_PASS')?.trim();
     const pass = rawPass ? rawPass.replace(/\s+/g, '') : undefined;
     let secureEnv = String(this.configService.get<string | boolean>('SMTP_SECURE') ?? '').trim();
 
@@ -38,7 +38,7 @@ export class MailService {
     }
 
     if (!host) host = 'smtp.gmail.com';
-    const portNum = port ? Number(port) : 587;
+    const portNum = port ? Number(port) : 465;
     const secure = secureEnv === 'true' || portNum === 465;
 
     const isValidConfig =
@@ -82,6 +82,18 @@ export class MailService {
           };
 
       this.transporter = nodemailer.createTransport(transportOptions);
+
+      this.transporter.verify((error) => {
+        if (error) {
+          this.logger.error(`SMTP connection verification failed (${host}:${portNum}): ${error.message}`);
+        } else {
+          this.logger.log(`Mailer SMTP connected successfully (${host}:${portNum}, secure=${secure})`);
+        }
+      });
+    } else {
+      this.logger.warn(
+        'SMTP configuration is missing or incomplete in environment variables (SMTP_USER / SMTP_PASS). Verification emails will NOT be sent via SMTP.',
+      );
     }
   }
 
@@ -105,45 +117,6 @@ export class MailService {
   }
 
   private async sendMail(to: string, subject: string, text: string, html: string): Promise<boolean> {
-    // 1. Try Brevo HTTPS REST API First (Port 443 - Zero domain required, 300 free emails/day to ANY recipient)
-    const brevoApiKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
-    if (brevoApiKey) {
-      try {
-        const senderEmail =
-          this.configService.get<string>('BREVO_SENDER_EMAIL')?.trim() ||
-          this.configService.get<string>('SMTP_USER')?.trim() ||
-          'mdkabirulhossainj@gmail.com';
-
-        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-          method: 'POST',
-          headers: {
-            accept: 'application/json',
-            'api-key': brevoApiKey,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            sender: { name: 'Luxe E-Commerce', email: senderEmail },
-            to: [{ email: to }],
-            subject,
-            htmlContent: html,
-            textContent: text,
-          }),
-        });
-
-        if (response.ok) {
-          const resData: any = await response.json();
-          this.logger.log(`Email sent successfully to ${to} via Brevo HTTPS API (messageId: ${resData.messageId || 'ok'})`);
-          return true;
-        } else {
-          const errData: any = await response.json();
-          this.logger.error(`Brevo API returned error for ${to}: ${JSON.stringify(errData)}`);
-        }
-      } catch (err) {
-        this.logger.error(`Brevo API request failed for ${to}: ${(err as Error).message}`);
-      }
-    }
-
-    // 2. Fallback to Nodemailer SMTP
     if (this.transporter) {
       try {
         let from = this.configService.get<string>('SMTP_FROM') || '"Luxe E-Commerce" <no-reply@luxe.com>';
