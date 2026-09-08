@@ -100,12 +100,15 @@ export class AuthService {
       },
     });
 
-    // Dispatch verification email in background (non-blocking) for instant HTTP response
-    this.mailService.sendVerificationEmail(user.email, otp).catch((mailError) => {
+    // Dispatch verification email and determine actual delivery status
+    let emailSent = false;
+    try {
+      emailSent = await this.mailService.sendVerificationEmail(user.email, otp);
+    } catch (mailError) {
       this.logger.error(
         `Failed to send verification email to ${user.email} during registration: ${(mailError as Error).message}`,
       );
-    });
+    }
 
     // Generate access & refresh tokens
     const payload: UserPayload = { id: user.id, sub: user.id, email: user.email, role: user.role };
@@ -113,9 +116,13 @@ export class AuthService {
     await this.updateRefreshToken(user.id, tokens.refresh_token);
 
     const { password, ...result } = user;
+    const message = emailSent
+      ? 'User registration successful. Verification OTP sent to email.'
+      : 'User registration successful, but verification email could not be sent due to server SMTP configuration. You can resend verification code later.';
+
     return {
-      message: 'User registered successfully. Verification OTP sent to email.',
-      emailSent: true,
+      message,
+      emailSent,
       welcomeCoupon: {
         code: 'WELCOME10',
         discount: '10% OFF',
@@ -256,14 +263,22 @@ export class AuthService {
     });
 
     try {
-      await this.mailService.sendVerificationEmail(user.email, otp);
+      const emailSent = await this.mailService.sendVerificationEmail(user.email, otp);
+      if (!emailSent) {
+        throw new BadRequestException(
+          'Failed to dispatch verification email. Please check server SMTP configuration.',
+        );
+      }
       return { message: 'Verification OTP resent successfully.' };
     } catch (mailError) {
+      if (mailError instanceof BadRequestException) {
+        throw mailError;
+      }
       this.logger.error(
         `Failed to resend verification email to ${user.email}: ${(mailError as Error).message}`,
       );
       throw new BadRequestException(
-        'Failed to dispatch verification email. Please check server SMTP configuration.',
+        `Failed to dispatch verification email: ${(mailError as Error).message}`,
       );
     }
   }

@@ -9,32 +9,52 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
 
   constructor(private configService: ConfigService) {
-    const host = this.configService.get<string>('SMTP_HOST');
+    const host = this.configService.get<string>('SMTP_HOST')?.trim();
     const port = this.configService.get<number | string>('SMTP_PORT');
     const user = this.configService.get<string>('SMTP_USER')?.trim();
-    const pass = this.configService.get<string>('SMTP_PASS')?.replace(/\s+/g, '');
-    const secureEnv = this.configService.get<string>('SMTP_SECURE');
+    const rawPass = this.configService.get<string>('SMTP_PASS')?.trim();
+    const pass = rawPass ? rawPass.replace(/\s+/g, '') : undefined;
+    const secureEnv = this.configService.get<string>('SMTP_SECURE')?.trim();
 
     const portNum = port ? Number(port) : 587;
-    const secure = secureEnv === 'true' || portNum === 465;
+    const secure = secureEnv !== undefined ? secureEnv === 'true' : portNum === 465;
 
-    if (host && user && pass) {
-      this.transporter = nodemailer.createTransport({
-        host,
-        port: portNum,
-        secure, // true for port 465 (SSL), false for 587 (STARTTLS)
-        auth: {
-          user,
-          pass,
-        },
-        family: 4, // Force IPv4 to prevent ENETUNREACH errors on cloud servers without IPv6 egress
-        connectionTimeout: 10000, // 10 seconds connection timeout
-        greetingTimeout: 10000, // 10 seconds greeting timeout
-        socketTimeout: 15000, // 15 seconds socket timeout
-        tls: {
-          rejectUnauthorized: false, // Prevent issues with self-signed SSL certificates in development
-        },
-      } as nodemailer.TransportOptions);
+    const isValidConfig =
+      Boolean(host) &&
+      Boolean(user) &&
+      Boolean(pass) &&
+      pass !== 'your-app-password' &&
+      pass !== 'your_mailtrap_pass';
+
+    if (isValidConfig) {
+      const isGmail = host?.includes('gmail.com');
+
+      const transportOptions: nodemailer.TransportOptions = isGmail
+        ? ({
+            service: 'gmail',
+            auth: {
+              user,
+              pass,
+            },
+          } as any)
+        : ({
+            host,
+            port: portNum,
+            secure, // true for port 465 (SSL), false for 587 (STARTTLS)
+            auth: {
+              user,
+              pass,
+            },
+            family: 4, // Force IPv4 to prevent ENETUNREACH errors on cloud servers without IPv6 egress
+            connectionTimeout: 10000, // 10 seconds connection timeout
+            greetingTimeout: 10000, // 10 seconds greeting timeout
+            socketTimeout: 15000, // 15 seconds socket timeout
+            tls: {
+              rejectUnauthorized: false, // Prevent issues with self-signed SSL certificates in development
+            },
+          } as nodemailer.TransportOptions);
+
+      this.transporter = nodemailer.createTransport(transportOptions);
 
       this.transporter.verify((error) => {
         if (error) {
@@ -45,20 +65,20 @@ export class MailService {
       });
     } else {
       this.logger.warn(
-        'SMTP configuration is missing or incomplete in .env (SMTP_USER / SMTP_PASS). Verification codes will be printed to console log.',
+        'SMTP configuration is missing or incomplete in environment variables (SMTP_USER / SMTP_PASS). Verification emails will NOT be sent via SMTP.',
       );
     }
   }
 
-  async sendVerificationEmail(email: string, otp: string): Promise<void> {
+  async sendVerificationEmail(email: string, otp: string): Promise<boolean> {
     const subject = 'Your Verification Code — Luxe E-Commerce';
     const text = `Welcome to Luxe E-Commerce!\n\nYour verification code is: ${otp}\n\nEnter this code to verify your email address.\n\nThis code will expire in 10 minutes.\n\nIf you didn't create an account, you can safely ignore this email.`;
     const html = this.buildVerificationEmailHtml(otp);
 
-    await this.sendMail(email, subject, text, html);
+    return await this.sendMail(email, subject, text, html);
   }
 
-  async sendResetPasswordEmail(email: string, token: string): Promise<void> {
+  async sendResetPasswordEmail(email: string, token: string): Promise<boolean> {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
@@ -66,10 +86,10 @@ export class MailService {
     const text = `You requested a password reset for your Luxe E-Commerce account.\n\nPlease reset your password by clicking the link below:\n\n${resetLink}\n\nOr use this reset token: ${token}\n\nThis link will expire in 15 minutes.\n\nIf you didn't request this, you can safely ignore this email.`;
     const html = this.buildResetPasswordEmailHtml(resetLink, token);
 
-    await this.sendMail(email, subject, text, html);
+    return await this.sendMail(email, subject, text, html);
   }
 
-  private async sendMail(to: string, subject: string, text: string, html: string): Promise<void> {
+  private async sendMail(to: string, subject: string, text: string, html: string): Promise<boolean> {
     const from = this.configService.get<string>('SMTP_FROM') || '"Luxe E-Commerce" <no-reply@luxe.com>';
 
     if (this.transporter) {
@@ -85,12 +105,14 @@ export class MailService {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         const messageId = String(info?.messageId || 'unknown');
         this.logger.log(`Email sent to ${to} (messageId: ${messageId})`);
+        return true;
       } catch (error) {
-        this.logger.error(`Failed to send email to ${to}`, (error as Error).stack);
-        throw new Error(`Failed to send email to ${to}. Please try again later.`);
+        this.logger.error(`Failed to send email to ${to}: ${(error as Error).message}`, (error as Error).stack);
+        throw new Error(`Failed to send email to ${to}: ${(error as Error).message}`);
       }
     } else {
-      // Development fallback: log the email content to the console
+      // Development / unconfigured SMTP fallback: log email content to console and return false
+      this.logger.warn(`[DEV MODE / UNCONFIGURED SMTP] Real email NOT sent to ${to}. Set SMTP environment variables on live server.`);
       this.logger.log(`
 =========================================
 [DEV MODE — EMAIL NOT SENT VIA SMTP]
@@ -100,6 +122,7 @@ Subject: ${subject}
 ${text}
 =========================================
       `);
+      return false;
     }
   }
 
