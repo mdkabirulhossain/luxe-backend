@@ -19,6 +19,22 @@ export class MailService {
   private transporter: nodemailer.Transporter | null = null;
   private readonly logger = new Logger(MailService.name);
 
+  private getBrevoApiKey(): string | undefined {
+    const raw =
+      this.configService.get<string>('BREVO_API_KEY') ||
+      process.env.BREVO_API_KEY ||
+      process.env['BREVO_API_KEY'];
+    return raw ? raw.replace(/^["']|["']$/g, '').trim() : undefined;
+  }
+
+  private getResendApiKey(): string | undefined {
+    const raw =
+      this.configService.get<string>('RESEND_API_KEY') ||
+      process.env.RESEND_API_KEY ||
+      process.env['RESEND_API_KEY'];
+    return raw ? raw.replace(/^["']|["']$/g, '').trim() : undefined;
+  }
+
   constructor(private configService: ConfigService) {
     let host = this.configService.get<string>('SMTP_HOST')?.trim();
     let port = this.configService.get<number | string>('SMTP_PORT');
@@ -78,31 +94,35 @@ export class MailService {
 
       this.transporter = nodemailer.createTransport(transportOptions);
 
-      this.transporter.verify((error) => {
-        if (error) {
-          this.logger.warn(
-            `SMTP connection verification timed out (${host}:${portNum}): ${error.message}. Note: Cloud platforms like Railway block outbound SMTP ports (25, 465, 587). On Railway, set BREVO_API_KEY to send emails via HTTPS API (Port 443).`,
-          );
-        } else {
-          this.logger.log(`Mailer SMTP connected successfully (${host}:${portNum}, secure=${secure})`);
-        }
-      });
-    } else {
-      const brevoApiKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
-      const resendApiKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
-      if (!brevoApiKey && !resendApiKey) {
-        this.logger.warn(
-          'Email service not configured. Set BREVO_API_KEY (recommended for Railway/Render) or SMTP variables.',
-        );
+      const brevoKey = this.getBrevoApiKey();
+      const resendKey = this.getResendApiKey();
+
+      // Only run transporter.verify if neither Brevo nor Resend is configured.
+      // On Railway, SMTP verify times out after 10s because ports 465/587 are firewalled.
+      if (!brevoKey && !resendKey) {
+        this.transporter.verify((error) => {
+          if (error) {
+            this.logger.warn(
+              `SMTP connection check timed out (${host}:${portNum}): ${error.message}. Note: Railway blocks outbound SMTP (ports 25, 465, 587). On Railway, set BREVO_API_KEY to send emails via HTTPS (Port 443).`,
+            );
+          } else {
+            this.logger.log(`Mailer SMTP connected successfully (${host}:${portNum}, secure=${secure})`);
+          }
+        });
       }
     }
 
-    const brevoKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
-    const resendKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
+    const brevoKey = this.getBrevoApiKey();
+    const resendKey = this.getResendApiKey();
+
     if (brevoKey) {
-      this.logger.log('Brevo HTTPS API enabled (Port 443 — fully supported on Railway/Render).');
+      this.logger.log(`✅ Brevo HTTPS API active (Key starts with: ${brevoKey.slice(0, 12)}...) — emails will be sent via Port 443.`);
     } else if (resendKey) {
-      this.logger.log('Resend HTTPS API enabled (Port 443 — fully supported on Railway/Render).');
+      this.logger.log(`✅ Resend HTTPS API active (Key starts with: ${resendKey.slice(0, 12)}...) — emails will be sent via Port 443.`);
+    } else {
+      this.logger.warn(
+        '⚠️ No cloud email API key (BREVO_API_KEY) detected! On Railway, direct SMTP is blocked. Please ensure BREVO_API_KEY is added to Railway Variables and the service is redeployed.',
+      );
     }
   }
 
@@ -127,16 +147,26 @@ export class MailService {
 
   private async sendMail(to: string, subject: string, text: string, html: string): Promise<boolean> {
     // 1. Brevo HTTPS API (Primary recommended for Railway/Render - 300 free emails/day over Port 443)
-    const brevoApiKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
+    const brevoApiKey = this.getBrevoApiKey();
     if (brevoApiKey) {
       try {
         const senderEmail =
-          this.configService.get<string>('BREVO_SENDER_EMAIL')?.trim() ||
-          this.configService.get<string>('SMTP_USER')?.trim() ||
-          'mdkabirulhossainj@gmail.com';
+          (this.configService.get<string>('BREVO_SENDER_EMAIL') ||
+           process.env.BREVO_SENDER_EMAIL ||
+           this.configService.get<string>('SMTP_USER') ||
+           process.env.SMTP_USER ||
+           'mdkabirulhossainj@gmail.com')
+            .replace(/^["']|["']$/g, '')
+            .trim();
+
         const senderName =
-          this.configService.get<string>('BREVO_SENDER_NAME')?.trim() ||
-          'Luxe E-Commerce';
+          (this.configService.get<string>('BREVO_SENDER_NAME') ||
+           process.env.BREVO_SENDER_NAME ||
+           'Luxe E-Commerce')
+            .replace(/^["']|["']$/g, '')
+            .trim();
+
+        this.logger.log(`Dispatching email to ${to} via Brevo HTTPS API (from: ${senderName} <${senderEmail}>)...`);
 
         const response = await fetch('https://api.brevo.com/v3/smtp/email', {
           method: 'POST',
@@ -157,15 +187,17 @@ export class MailService {
         const data: any = await response.json().catch(() => ({}));
         if (response.ok) {
           const messageId = data?.messageId || data?.messageIds?.[0] || 'ok';
-          this.logger.log(`Email sent to ${to} via Brevo HTTPS API (messageId: ${messageId})`);
+          this.logger.log(`✅ Email sent to ${to} via Brevo HTTPS API (messageId: ${messageId})`);
           return true;
         } else {
           this.logger.error(
-            `Brevo API error (${response.status}): ${JSON.stringify(data)}. Note: sender email "${senderEmail}" must be verified in Brevo.`,
+            `❌ Brevo API error (${response.status}): ${JSON.stringify(data)}. Note: sender email "${senderEmail}" must be verified in Brevo.`,
           );
+          return false;
         }
       } catch (error) {
-        this.logger.error(`Failed to send email via Brevo API to ${to}: ${(error as Error).message}`);
+        this.logger.error(`❌ Failed to send email via Brevo API to ${to}: ${(error as Error).message}`);
+        return false;
       }
     }
 
