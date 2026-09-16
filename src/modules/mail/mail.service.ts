@@ -80,15 +80,29 @@ export class MailService {
 
       this.transporter.verify((error) => {
         if (error) {
-          this.logger.error(`SMTP connection verification failed (${host}:${portNum}): ${error.message}`);
+          this.logger.warn(
+            `SMTP connection verification timed out (${host}:${portNum}): ${error.message}. Note: Cloud platforms like Railway block outbound SMTP ports (25, 465, 587). On Railway, set BREVO_API_KEY to send emails via HTTPS API (Port 443).`,
+          );
         } else {
           this.logger.log(`Mailer SMTP connected successfully (${host}:${portNum}, secure=${secure})`);
         }
       });
     } else {
-      this.logger.warn(
-        'SMTP configuration is missing or incomplete in environment variables (SMTP_USER / SMTP_PASS). Verification emails will NOT be sent via SMTP.',
-      );
+      const brevoApiKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
+      const resendApiKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
+      if (!brevoApiKey && !resendApiKey) {
+        this.logger.warn(
+          'Email service not configured. Set BREVO_API_KEY (recommended for Railway/Render) or SMTP variables.',
+        );
+      }
+    }
+
+    const brevoKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
+    const resendKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
+    if (brevoKey) {
+      this.logger.log('Brevo HTTPS API enabled (Port 443 — fully supported on Railway/Render).');
+    } else if (resendKey) {
+      this.logger.log('Resend HTTPS API enabled (Port 443 — fully supported on Railway/Render).');
     }
   }
 
@@ -112,6 +126,87 @@ export class MailService {
   }
 
   private async sendMail(to: string, subject: string, text: string, html: string): Promise<boolean> {
+    // 1. Brevo HTTPS API (Primary recommended for Railway/Render - 300 free emails/day over Port 443)
+    const brevoApiKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
+    if (brevoApiKey) {
+      try {
+        const senderEmail =
+          this.configService.get<string>('BREVO_SENDER_EMAIL')?.trim() ||
+          this.configService.get<string>('SMTP_USER')?.trim() ||
+          'mdkabirulhossainj@gmail.com';
+        const senderName =
+          this.configService.get<string>('BREVO_SENDER_NAME')?.trim() ||
+          'Luxe E-Commerce';
+
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'api-key': brevoApiKey,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            sender: { name: senderName, email: senderEmail },
+            to: [{ email: to }],
+            subject,
+            textContent: text,
+            htmlContent: html,
+          }),
+        });
+
+        const data: any = await response.json().catch(() => ({}));
+        if (response.ok) {
+          const messageId = data?.messageId || data?.messageIds?.[0] || 'ok';
+          this.logger.log(`Email sent to ${to} via Brevo HTTPS API (messageId: ${messageId})`);
+          return true;
+        } else {
+          this.logger.error(
+            `Brevo API error (${response.status}): ${JSON.stringify(data)}. Note: sender email "${senderEmail}" must be verified in Brevo.`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(`Failed to send email via Brevo API to ${to}: ${(error as Error).message}`);
+      }
+    }
+
+    // 2. Resend HTTPS API (Alternative Port 443 option)
+    const resendApiKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
+    if (resendApiKey) {
+      try {
+        let from =
+          this.configService.get<string>('RESEND_FROM') ||
+          this.configService.get<string>('SMTP_FROM') ||
+          'Luxe E-Commerce <onboarding@resend.dev>';
+        from = from.replace(/^["']|["']$/g, '').trim();
+
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from,
+            to: [to],
+            subject,
+            text,
+            html,
+          }),
+        });
+
+        const data: any = await response.json().catch(() => ({}));
+        if (response.ok) {
+          this.logger.log(`Email sent to ${to} via Resend HTTPS API (messageId: ${data?.id || 'ok'})`);
+          return true;
+        } else {
+          this.logger.error(`Resend API returned error (${response.status}): ${JSON.stringify(data)}`);
+        }
+      } catch (error) {
+        this.logger.error(`Failed to send email via Resend API to ${to}: ${(error as Error).message}`);
+      }
+    }
+
+    // 3. Fallback: Nodemailer SMTP (Local development)
     if (this.transporter) {
       try {
         let from = this.configService.get<string>('SMTP_FROM') || '"Luxe E-Commerce" <no-reply@luxe.com>';
@@ -133,8 +228,10 @@ export class MailService {
       }
     }
 
-    // 3. Fallback: Dev mode logging
-    this.logger.warn(`[DEV MODE / UNCONFIGURED MAILER] Real email NOT sent to ${to}. Set SMTP environment variables.`);
+    // 4. Fallback: Dev mode logging
+    this.logger.warn(
+      `[DEV MODE / UNCONFIGURED MAILER] Real email NOT sent to ${to}. Set RESEND_API_KEY (for Railway) or SMTP variables.`,
+    );
     this.logger.log(`
 =========================================
 [DEV MODE — EMAIL NOT SENT]
