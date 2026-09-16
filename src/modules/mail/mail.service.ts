@@ -23,8 +23,12 @@ export class MailService {
     const raw =
       this.configService.get<string>('BREVO_API_KEY') ||
       process.env.BREVO_API_KEY ||
-      process.env['BREVO_API_KEY'];
-    return raw ? raw.replace(/^["']|["']$/g, '').trim() : undefined;
+      process.env['BREVO_API_KEY'] ||
+      process.env.BREVO_KEY ||
+      process.env.BREVO_TOKEN;
+
+    const cleaned = raw ? raw.replace(/^["']|["']$/g, '').trim() : undefined;
+    return cleaned && cleaned.length > 5 ? cleaned : undefined;
   }
 
   private getResendApiKey(): string | undefined {
@@ -36,6 +40,9 @@ export class MailService {
   }
 
   constructor(private configService: ConfigService) {
+    const brevoKey = this.getBrevoApiKey();
+    const resendKey = this.getResendApiKey();
+
     let host = this.configService.get<string>('SMTP_HOST')?.trim();
     let port = this.configService.get<number | string>('SMTP_PORT');
     let user = this.configService.get<string>('SMTP_USER')?.trim();
@@ -94,9 +101,6 @@ export class MailService {
 
       this.transporter = nodemailer.createTransport(transportOptions);
 
-      const brevoKey = this.getBrevoApiKey();
-      const resendKey = this.getResendApiKey();
-
       // Only run transporter.verify if neither Brevo nor Resend is configured.
       // On Railway, SMTP verify times out after 10s because ports 465/587 are firewalled.
       if (!brevoKey && !resendKey) {
@@ -112,17 +116,10 @@ export class MailService {
       }
     }
 
-    const brevoKey = this.getBrevoApiKey();
-    const resendKey = this.getResendApiKey();
-
     if (brevoKey) {
-      this.logger.log(`✅ Brevo HTTPS API active (Key starts with: ${brevoKey.slice(0, 12)}...) — emails will be sent via Port 443.`);
+      this.logger.log(`✅ Brevo HTTPS API active (Key: ${brevoKey.slice(0, 15)}...) — Port 443 email delivery enabled.`);
     } else if (resendKey) {
-      this.logger.log(`✅ Resend HTTPS API active (Key starts with: ${resendKey.slice(0, 12)}...) — emails will be sent via Port 443.`);
-    } else {
-      this.logger.warn(
-        '⚠️ No cloud email API key (BREVO_API_KEY) detected! On Railway, direct SMTP is blocked. Please ensure BREVO_API_KEY is added to Railway Variables and the service is redeployed.',
-      );
+      this.logger.log(`✅ Resend HTTPS API active (Key: ${resendKey.slice(0, 15)}...) — Port 443 email delivery enabled.`);
     }
   }
 
