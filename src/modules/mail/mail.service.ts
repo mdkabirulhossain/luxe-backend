@@ -19,16 +19,73 @@ export class MailService {
   private transporter: nodemailer.Transporter | null = null;
   private readonly logger = new Logger(MailService.name);
 
-  private getBrevoApiKey(): string | undefined {
-    const raw =
-      this.configService.get<string>('BREVO_API_KEY') ||
-      process.env.BREVO_API_KEY ||
-      process.env['BREVO_API_KEY'] ||
-      process.env.BREVO_KEY ||
-      process.env.BREVO_TOKEN;
+  private getBrevoApiKey(): { key: string; source: string } | undefined {
+    // 1. Check common direct environment variables
+    const directCandidates = [
+      { val: this.configService.get<string>('BREVO_API_KEY'), src: 'ConfigService(BREVO_API_KEY)' },
+      { val: process.env.BREVO_API_KEY, src: 'process.env.BREVO_API_KEY' },
+      { val: process.env['BREVO_API_KEY'], src: "process.env['BREVO_API_KEY']" },
+      { val: process.env.BREVO_KEY, src: 'process.env.BREVO_KEY' },
+      { val: process.env.BREVO_TOKEN, src: 'process.env.BREVO_TOKEN' },
+      { val: process.env.SENDINBLUE_API_KEY, src: 'process.env.SENDINBLUE_API_KEY' },
+      { val: process.env.SIB_API_KEY, src: 'process.env.SIB_API_KEY' },
+    ];
 
-    const cleaned = raw ? raw.replace(/^["']|["']$/g, '').trim() : undefined;
-    return cleaned && cleaned.length > 5 ? cleaned : undefined;
+    for (const item of directCandidates) {
+      if (item.val) {
+        const cleaned = item.val.replace(/^["']|["']$/g, '').trim();
+        if (cleaned.length > 5) {
+          return { key: cleaned, source: item.src };
+        }
+      }
+    }
+
+    // 2. Case-insensitive & normalized search across all process.env keys (essential for Linux/Railway)
+    for (const [key, value] of Object.entries(process.env)) {
+      if (typeof value !== 'string') continue;
+      const normalized = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (
+        (normalized.includes('BREVO') && (normalized.includes('KEY') || normalized.includes('TOKEN') || normalized.includes('API'))) ||
+        normalized === 'BREVO' ||
+        (normalized.includes('SENDINBLUE') && normalized.includes('KEY'))
+      ) {
+        const cleaned = value.replace(/^["']|["']$/g, '').trim();
+        if (cleaned.length > 5) {
+          return { key: cleaned, source: `process.env[${key}]` };
+        }
+      }
+    }
+
+    // 3. Scan all environment values for Brevo's signature prefix ('xkeysib-')
+    for (const [key, value] of Object.entries(process.env)) {
+      if (typeof value === 'string') {
+        const cleaned = value.replace(/^["']|["']$/g, '').trim();
+        if (cleaned.startsWith('xkeysib-')) {
+          return { key: cleaned, source: `process.env[${key}] (detected xkeysib- prefix)` };
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private getBrevoSenderEmail(): string {
+    const raw =
+      this.configService.get<string>('BREVO_SENDER_EMAIL') ||
+      process.env.BREVO_SENDER_EMAIL ||
+      process.env.BREVO_EMAIL ||
+      this.configService.get<string>('SMTP_USER') ||
+      process.env.SMTP_USER ||
+      'mdkabirulhossainj@gmail.com';
+    return raw.replace(/^["']|["']$/g, '').trim();
+  }
+
+  private getBrevoSenderName(): string {
+    const raw =
+      this.configService.get<string>('BREVO_SENDER_NAME') ||
+      process.env.BREVO_SENDER_NAME ||
+      'Luxe E-Commerce';
+    return raw.replace(/^["']|["']$/g, '').trim();
   }
 
   private getResendApiKey(): string | undefined {
@@ -40,7 +97,7 @@ export class MailService {
   }
 
   constructor(private configService: ConfigService) {
-    const brevoKey = this.getBrevoApiKey();
+    const brevoConfig = this.getBrevoApiKey();
     const resendKey = this.getResendApiKey();
 
     let host = this.configService.get<string>('SMTP_HOST')?.trim();
@@ -63,10 +120,6 @@ export class MailService {
 
     if (isValidConfig) {
       const isGmail = host.toLowerCase().includes('gmail.com');
-
-      // Use service: 'gmail' only when using default port 465 with SSL.
-      // If port 587 is specified, use standard host/port transport options (STARTTLS)
-      // to avoid cloud firewall port 465 connection timeouts on Railway/Render.
       const useGmailService = isGmail && portNum === 465;
 
       const transportOptions: any = useGmailService
@@ -102,8 +155,8 @@ export class MailService {
       this.transporter = nodemailer.createTransport(transportOptions);
 
       // Only run transporter.verify if neither Brevo nor Resend is configured.
-      // On Railway, SMTP verify times out after 10s because ports 465/587 are firewalled.
-      if (!brevoKey && !resendKey) {
+      // On Railway, SMTP verify times out because ports 25, 465, and 587 are blocked.
+      if (!brevoConfig && !resendKey) {
         this.transporter.verify((error) => {
           if (error) {
             this.logger.warn(
@@ -116,10 +169,18 @@ export class MailService {
       }
     }
 
-    if (brevoKey) {
-      this.logger.log(`✅ Brevo HTTPS API active (Key: ${brevoKey.slice(0, 15)}...) — Port 443 email delivery enabled.`);
+    if (brevoConfig) {
+      const senderEmail = this.getBrevoSenderEmail();
+      const senderName = this.getBrevoSenderName();
+      this.logger.log(
+        `✅ Brevo HTTPS API active (via ${brevoConfig.source}, Key: ${brevoConfig.key.slice(0, 15)}... | Sender: ${senderName} <${senderEmail}>) — Port 443 email delivery enabled.`,
+      );
     } else if (resendKey) {
       this.logger.log(`✅ Resend HTTPS API active (Key: ${resendKey.slice(0, 15)}...) — Port 443 email delivery enabled.`);
+    } else {
+      this.logger.warn(
+        '⚠️ No cloud email API key configured! Note: On Railway, raw SMTP (ports 25/465/587) is blocked by firewall.',
+      );
     }
   }
 
@@ -143,25 +204,12 @@ export class MailService {
   }
 
   private async sendMail(to: string, subject: string, text: string, html: string): Promise<boolean> {
-    // 1. Brevo HTTPS API (Primary recommended for Railway/Render - 300 free emails/day over Port 443)
-    const brevoApiKey = this.getBrevoApiKey();
-    if (brevoApiKey) {
+    // 1. Brevo HTTPS API (Primary for Railway/Render — 300 free emails/day over Port 443)
+    const brevoConfig = this.getBrevoApiKey();
+    if (brevoConfig) {
       try {
-        const senderEmail =
-          (this.configService.get<string>('BREVO_SENDER_EMAIL') ||
-           process.env.BREVO_SENDER_EMAIL ||
-           this.configService.get<string>('SMTP_USER') ||
-           process.env.SMTP_USER ||
-           'mdkabirulhossainj@gmail.com')
-            .replace(/^["']|["']$/g, '')
-            .trim();
-
-        const senderName =
-          (this.configService.get<string>('BREVO_SENDER_NAME') ||
-           process.env.BREVO_SENDER_NAME ||
-           'Luxe E-Commerce')
-            .replace(/^["']|["']$/g, '')
-            .trim();
+        const senderEmail = this.getBrevoSenderEmail();
+        const senderName = this.getBrevoSenderName();
 
         this.logger.log(`Dispatching email to ${to} via Brevo HTTPS API (from: ${senderName} <${senderEmail}>)...`);
 
@@ -169,7 +217,7 @@ export class MailService {
           method: 'POST',
           headers: {
             accept: 'application/json',
-            'api-key': brevoApiKey,
+            'api-key': brevoConfig.key,
             'content-type': 'application/json',
           },
           body: JSON.stringify({
@@ -188,18 +236,16 @@ export class MailService {
           return true;
         } else {
           this.logger.error(
-            `❌ Brevo API error (${response.status}): ${JSON.stringify(data)}. Note: sender email "${senderEmail}" must be verified in Brevo.`,
+            `❌ Brevo API error (${response.status}): ${JSON.stringify(data)}. Sender email "${senderEmail}" must be verified in Brevo.`,
           );
-          return false;
         }
       } catch (error) {
         this.logger.error(`❌ Failed to send email via Brevo API to ${to}: ${(error as Error).message}`);
-        return false;
       }
     }
 
     // 2. Resend HTTPS API (Alternative Port 443 option)
-    const resendApiKey = this.configService.get<string>('RESEND_API_KEY')?.trim();
+    const resendApiKey = this.getResendApiKey();
     if (resendApiKey) {
       try {
         let from =
@@ -225,18 +271,26 @@ export class MailService {
 
         const data: any = await response.json().catch(() => ({}));
         if (response.ok) {
-          this.logger.log(`Email sent to ${to} via Resend HTTPS API (messageId: ${data?.id || 'ok'})`);
+          this.logger.log(`✅ Email sent to ${to} via Resend HTTPS API (messageId: ${data?.id || 'ok'})`);
           return true;
         } else {
-          this.logger.error(`Resend API returned error (${response.status}): ${JSON.stringify(data)}`);
+          this.logger.error(`❌ Resend API returned error (${response.status}): ${JSON.stringify(data)}`);
         }
       } catch (error) {
-        this.logger.error(`Failed to send email via Resend API to ${to}: ${(error as Error).message}`);
+        this.logger.error(`❌ Failed to send email via Resend API to ${to}: ${(error as Error).message}`);
       }
     }
 
-    // 3. Fallback: Nodemailer SMTP (Local development)
-    if (this.transporter) {
+    // 3. Fallback: Nodemailer SMTP (Local development only — skipped on Railway/Cloud where SMTP ports are blocked)
+    const isCloudHosting = Boolean(
+      process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_STATIC_URL ||
+      process.env.RAILWAY_SERVICE_ID ||
+      process.env.RENDER ||
+      process.env.FLY_APP_NAME,
+    );
+
+    if (this.transporter && !isCloudHosting) {
       try {
         let from = this.configService.get<string>('SMTP_FROM') || '"Luxe E-Commerce" <no-reply@luxe.com>';
         from = from.replace(/^["']|["']$/g, '').trim();
@@ -255,11 +309,16 @@ export class MailService {
         this.logger.error(`Failed to send email via SMTP to ${to}: ${(error as Error).message}`);
         return false;
       }
+    } else if (isCloudHosting) {
+      this.logger.error(
+        `❌ Cannot send email to ${to}: Direct SMTP is blocked on Railway. Brevo API delivery did not succeed. Check your Brevo API key and verified sender.`,
+      );
+      return false;
     }
 
     // 4. Fallback: Dev mode logging
     this.logger.warn(
-      `[DEV MODE / UNCONFIGURED MAILER] Real email NOT sent to ${to}. Set RESEND_API_KEY (for Railway) or SMTP variables.`,
+      `[DEV MODE / UNCONFIGURED MAILER] Real email NOT sent to ${to}. Set BREVO_API_KEY (for Railway) or SMTP variables.`,
     );
     this.logger.log(`
 =========================================
